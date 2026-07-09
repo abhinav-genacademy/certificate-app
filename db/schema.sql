@@ -18,6 +18,7 @@ create table if not exists students (
   email text not null,
   credential_id text unique,
   certificate_url text,
+  certificate_png bytea,
   issued_at timestamptz,
   revoked_at timestamptz,
   -- 'manual' = an admin added this person by hand (an exception the
@@ -29,6 +30,9 @@ create table if not exists students (
   updated_at timestamptz not null default now(),
   unique (cohort_id, email)
 );
+
+-- Safe to re-run against a database created before certificate_png existed.
+alter table students add column if not exists certificate_png bytea;
 
 create index if not exists students_credential_id_idx on students(credential_id);
 

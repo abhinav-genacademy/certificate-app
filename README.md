@@ -65,9 +65,9 @@ so make sure to set it in production.
   identically against Neon and a local/Docker Postgres, since Neon is
   wire-protocol compatible.
 - Puppeteer (Chromium) renders the certificate HTML/CSS to a PNG.
-- Vercel Blob stores only the generated certificate PNGs, keyed by
-  credential ID (falls back to `public/generated-certificates/` locally,
-  so `npm run dev` needs no Blob setup).
+- Certificate PNGs are stored as bytes in Postgres (`students.certificate_png`)
+  and served from `/api/certificates/[credentialId]` — no separate file/blob
+  storage to provision.
 - `qrcode` generates the verification QR embedded on each certificate.
 
 Reads/writes that touch more than one row (rebuilding a roster from a fresh
@@ -83,8 +83,7 @@ CSV upload, deleting a student) run inside a real transaction — see
    psql "$DATABASE_URL" -f db/schema.sql
    ```
 3. Copy `.env.example` to `.env` and fill in the values (see below) —
-   `DATABASE_URL` is required; `BLOB_READ_WRITE_TOKEN` can stay empty for
-   local dev.
+   `DATABASE_URL` is required.
 4. Install dependencies:
    ```bash
    npm install
@@ -96,8 +95,7 @@ CSV upload, deleting a student) run inside a real transaction — see
 6. Sign in at `http://localhost:3000/<your ADMIN_PATH>/login` with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 Locally, certificate rendering uses the full `puppeteer` package (bundled
-Chromium) automatically — no extra setup needed. Certificate images are
-written to `public/generated-certificates/` (gitignored).
+Chromium) automatically — no extra setup needed.
 
 ## Environment variables
 
@@ -109,7 +107,6 @@ written to `public/generated-certificates/` (gitignored).
 | `ADMIN_PATH` | The secret path the admin area lives at instead of `/admin` (e.g. `staff-portal-7g2k`). Falls back to plain `/admin` if unset. |
 | `SESSION_SECRET` | Random string used to sign the admin session cookie (`openssl rand -base64 32`). |
 | `NEXT_PUBLIC_BASE_URL` | Public URL of the deployment (no trailing slash) — used to build the QR code and shareable verify links baked into each certificate. |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token. Leave empty locally; required in production. |
 | `AUTOMATION_API_KEY` | Optional. Bearer token that authorizes the separate Google Forms integration (`../google-forms-certificate-addon`) to mark an *already-rostered* student as completed and generate their certificate — it only matches existing roster entries (built from the Week 2/3 CSVs, or added manually), it never enrolls someone new. Scoped to that one action only, separate from the admin login. Leave unset if you're not using that integration. |
 
 ## Deploying to Vercel
@@ -139,16 +136,13 @@ env vars are set (below) run `vercel --prod` to deploy to your production URL.
    this and sets `DATABASE_URL` for you automatically — or create one
    directly on neon.tech and add the env var yourself). Either way, run the
    schema against it once: `psql "$DATABASE_URL" -f db/schema.sql`.
-2. In the Vercel project → **Storage** tab → **Create Database** → **Blob**.
-   This gives you `BLOB_READ_WRITE_TOKEN` — Vercel adds it to your project's
-   env vars automatically when you create the store this way.
-3. Project → **Settings → Environment Variables**, add:
+2. Project → **Settings → Environment Variables**, add:
    - `DATABASE_URL` — the Neon connection string (skip if step 1's Vercel integration already set it).
    - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — the one admin account's sign-in credentials.
    - `ADMIN_PATH` — a private, hard-to-guess path segment for the admin area (e.g. `staff-portal-7g2k`). Without this, admin is reachable at plain `/admin`.
    - `SESSION_SECRET` — a random string (`openssl rand -base64 32`, or any long random value).
    - `NEXT_PUBLIC_BASE_URL` — your Vercel URL, e.g. `https://your-project.vercel.app` (no trailing slash). This gets baked into every certificate's QR code and verify link, so set it *before* generating any real certificates, and redeploy if it changes.
-4. Redeploy (Vercel does this automatically after an env var change if you use the dashboard; with the CLI run `vercel --prod` again).
+3. Redeploy (Vercel does this automatically after an env var change if you use the dashboard; with the CLI run `vercel --prod` again).
 
 On Vercel, certificate rendering automatically switches to `puppeteer-core` +
 `@sparticuz/chromium` (serverless-friendly Chromium) — detected via the

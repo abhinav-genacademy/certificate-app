@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",
-    "@vercel/blob": "^2.5.0",
     "csv-parse": "^7.0.1",
     "jose": "^6.2.3",
     "next": "16.2.10",

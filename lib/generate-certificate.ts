@@ -1,7 +1,6 @@
 import { deriveCredentialId } from "@/lib/credential";
 import { generateQrDataUrl } from "@/lib/qr";
 import { renderCertificatePng } from "@/lib/certificate-render";
-import { writeCertificatePng } from "@/lib/blob-store";
 import { markStudentIssued, type Cohort } from "@/lib/store";
 
 function getBaseUrl(): string {
@@ -40,12 +39,11 @@ export async function generateCertificateForStudent(cohort: Cohort, studentId: s
     qrDataUrl,
   });
 
-  const certificateUrl = await writeCertificatePng(`${credentialId}.png`, png);
   const issuedAtIso = issuedAt.toISOString();
 
   return markStudentIssued(cohort.id, studentId, {
     credentialId,
-    certificateUrl,
+    certificatePng: png,
     issuedAt: issuedAtIso,
   });
 }

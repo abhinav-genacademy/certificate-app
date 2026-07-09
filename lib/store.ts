@@ -1,5 +1,4 @@
 import { query, sql, transaction } from "@/lib/db-client";
-import { deleteCertificatePng } from "@/lib/blob-store";
 
 export type Student = {
   id: string;
@@ -35,6 +34,12 @@ function isoString(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string).toISOString();
 }
 
+// Certificate images are served from our own DB-backed route, keyed
+// deterministically by credential ID — no need to store/read a URL column.
+function certificateUrlFor(credentialId: string | null): string | null {
+  return credentialId ? `/api/certificates/${credentialId}` : null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapStudentRow(row: any): Student {
   return {
@@ -43,7 +48,7 @@ function mapStudentRow(row: any): Student {
     lastName: row.last_name,
     email: row.email,
     credentialId: row.credential_id,
-    certificateUrl: row.certificate_url,
+    certificateUrl: certificateUrlFor(row.credential_id),
     issuedAt: row.issued_at ? isoString(row.issued_at) : null,
     revokedAt: row.revoked_at ? isoString(row.revoked_at) : null,
     createdAt: isoString(row.created_at),
@@ -107,7 +112,11 @@ export async function getCohort(id: string): Promise<Cohort | null> {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const studentRows = await query<any>(
-    sql`SELECT * FROM students WHERE cohort_id = ${id} ORDER BY created_at`
+    sql`
+      SELECT id, cohort_id, first_name, last_name, email, credential_id,
+             certificate_url, issued_at, revoked_at, source, created_at, updated_at
+      FROM students WHERE cohort_id = ${id} ORDER BY created_at
+    `
   );
 
   return {
@@ -213,7 +222,9 @@ export async function setRequirementList(
 // uploaded yet, the intersection is empty and every non-manual student is
 // removed — matches "the roster only exists once both lists are in."
 async function recomputeRoster(cohortId: string): Promise<Cohort> {
-  const results = await transaction<{ credential_id: string | null }>([
+  // The certificate image lives in the same row (certificate_png), so
+  // deleting it is automatic — no separate cleanup needed.
+  await transaction([
     sql`
       DELETE FROM students
       WHERE cohort_id = ${cohortId}
@@ -224,7 +235,6 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
             ON w3.cohort_id = ${cohortId} AND w3.week = 'week3' AND w3.email = w2.email
           WHERE w2.cohort_id = ${cohortId} AND w2.week = 'week2'
         )
-      RETURNING credential_id
     `,
     sql`
       INSERT INTO students (id, cohort_id, first_name, last_name, email, source, created_at, updated_at)
@@ -241,11 +251,6 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
     `,
   ]);
 
-  const removed = results[0];
-  for (const row of removed) {
-    if (row.credential_id) await deleteCertificatePng(`${row.credential_id}.png`);
-  }
-
   const cohort = await getCohort(cohortId);
   if (!cohort) throw new Error("Cohort not found");
   return cohort;
@@ -254,15 +259,26 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
 export async function markStudentIssued(
   cohortId: string,
   studentId: string,
-  data: { credentialId: string; certificateUrl: string; issuedAt: string }
+  data: { credentialId: string; certificatePng: Buffer; issuedAt: string }
 ): Promise<{ credentialId: string; certificateUrl: string; issuedAt: string }> {
   await query(sql`
     UPDATE students
-    SET credential_id = ${data.credentialId}, certificate_url = ${data.certificateUrl},
+    SET credential_id = ${data.credentialId}, certificate_png = ${data.certificatePng},
         issued_at = ${data.issuedAt}, revoked_at = NULL, updated_at = now()
     WHERE id = ${studentId} AND cohort_id = ${cohortId}
   `);
-  return data;
+  return {
+    credentialId: data.credentialId,
+    certificateUrl: certificateUrlFor(data.credentialId)!,
+    issuedAt: data.issuedAt,
+  };
+}
+
+export async function getCertificateImage(credentialId: string): Promise<Buffer | null> {
+  const rows = await query<{ certificate_png: Buffer | null }>(sql`
+    SELECT certificate_png FROM students WHERE credential_id = ${credentialId}
+  `);
+  return rows[0]?.certificate_png ?? null;
 }
 
 export async function setStudentRevoked(
@@ -286,12 +302,11 @@ export async function setStudentRevoked(
 }
 
 export async function deleteStudent(cohortId: string, studentId: string): Promise<void> {
-  const rows = await query<{ credential_id: string | null }>(sql`
+  const rows = await query<{ id: string }>(sql`
     DELETE FROM students WHERE id = ${studentId} AND cohort_id = ${cohortId}
-    RETURNING credential_id
+    RETURNING id
   `);
   if (rows.length === 0) throw new Error("Student not found");
-  if (rows[0].credential_id) await deleteCertificatePng(`${rows[0].credential_id}.png`);
 }
 
 export async function findByCredentialId(
@@ -299,7 +314,9 @@ export async function findByCredentialId(
 ): Promise<{ cohort: Cohort; student: Student } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await query<any>(sql`
-    SELECT s.*, c.course_name AS c_course_name,
+    SELECT s.id, s.cohort_id, s.first_name, s.last_name, s.email, s.credential_id,
+           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.created_at, s.updated_at,
+           c.course_name AS c_course_name,
            c.cohort_label AS c_cohort_label, c.created_at AS c_created_at
     FROM students s JOIN cohorts c ON c.id = s.cohort_id
     WHERE s.credential_id = ${credentialId}
@@ -325,7 +342,9 @@ export async function findByIdentity(
 ): Promise<{ cohort: Cohort; student: Student }[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await query<any>(sql`
-    SELECT s.*, c.course_name AS c_course_name,
+    SELECT s.id, s.cohort_id, s.first_name, s.last_name, s.email, s.credential_id,
+           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.created_at, s.updated_at,
+           c.course_name AS c_course_name,
            c.cohort_label AS c_cohort_label, c.created_at AS c_created_at
     FROM students s JOIN cohorts c ON c.id = s.cohort_id
     WHERE lower(s.email) = lower(${email})

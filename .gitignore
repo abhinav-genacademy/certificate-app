@@ -37,8 +37,6 @@ yarn-error.log*
 # vercel
 .vercel
 
-# local storage fallback (used when BLOB_READ_WRITE_TOKEN is unset)
-/public/generated-certificates
 /.local-data
 
 # typescript
