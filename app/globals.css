@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+:root {
+  --background: #05070d;
+  --foreground: #ffffff;
+  --academy-yellow: #fefb41;
+  --deep-navy: #07111f;
+  --midnight-navy: #0b1020;
+  --muted-grey: #a8afbd;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-academy-yellow: var(--academy-yellow);
+  --color-deep-navy: var(--deep-navy);
+  --color-midnight-navy: var(--midnight-navy);
+  --color-muted-grey: var(--muted-grey);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(circle at 82% 80%, rgba(80, 70, 160, 0.18), transparent 34%),
+    linear-gradient(180deg, #05070d 0%, #07111f 100%);
+  background-attachment: fixed;
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+.brand-card {
+  background: rgba(11, 16, 32, 0.65);
+  border: 1px solid rgba(254, 251, 65, 0.16);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.6);
+}
+
+.brand-input {
+  width: 100%;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  color: #ffffff;
+  padding: 11px 14px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.brand-input:focus {
+  border-color: var(--academy-yellow);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.brand-button {
+  background: var(--academy-yellow);
+  color: #0b1020;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 11px 22px;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.brand-button:hover {
+  opacity: 0.88;
+}
+
+.brand-button:active {
+  transform: scale(0.98);
+}
+
+.brand-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.brand-button-secondary {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  padding: 11px 22px;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.brand-button-secondary:hover {
+  border-color: var(--academy-yellow);
+  background: rgba(254, 251, 65, 0.06);
+}

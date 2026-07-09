@@ -1,0 +1,36 @@
+{
+  "name": "gen-academy-certs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "^149.0.0",
+    "@vercel/blob": "^2.5.0",
+    "csv-parse": "^7.0.1",
+    "jose": "^6.2.3",
+    "next": "16.2.10",
+    "pg": "^8.22.0",
+    "puppeteer-core": "^25.3.0",
+    "qrcode": "^1.5.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "puppeteer": "^25.3.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
