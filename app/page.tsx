@@ -142,6 +142,12 @@ export default function HomePage() {
                 </p>
               </div>
 
+              <img
+                src={cert.certificateUrl}
+                alt={`Certificate for ${cert.firstName}`}
+                className="w-full rounded-lg border border-white/10"
+              />
+
               <div>
                 <div className="text-xs uppercase tracking-[2px] text-muted-grey">
                   Your credential ID

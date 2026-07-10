@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findByIdentity, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
 import { generateCertificateForStudent } from "@/lib/generate-certificate";
+import { buildLinkedInAddUrl } from "@/lib/linkedin";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,24 +11,6 @@ const ASSESSMENT_FORM_URL = "https://docs.google.com/forms/d/1s1iU5O3MTMqbAvx-I2
 function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_BASE_URL ?? "";
   return url.replace(/\/$/, "");
-}
-
-function buildLinkedInAddUrl(params: {
-  courseName: string;
-  credentialId: string;
-  verifyUrl: string;
-  issuedAt: Date;
-}): string {
-  const search = new URLSearchParams({
-    startTask: "CERTIFICATION_NAME",
-    name: params.courseName,
-    organizationName: "The Gen Academy",
-    issueYear: String(params.issuedAt.getFullYear()),
-    issueMonth: String(params.issuedAt.getMonth() + 1),
-    certUrl: params.verifyUrl,
-    certId: params.credentialId,
-  });
-  return `https://www.linkedin.com/profile/add?${search.toString()}`;
 }
 
 export async function POST(request: NextRequest) {

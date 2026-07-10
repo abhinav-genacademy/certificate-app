@@ -1,6 +1,12 @@
 import { findByCredentialId } from "@/lib/store";
+import { buildLinkedInAddUrl } from "@/lib/linkedin";
 
 export const dynamic = "force-dynamic";
+
+function getBaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_BASE_URL ?? "";
+  return url.replace(/\/$/, "");
+}
 
 export default async function VerifyPage({
   params,
@@ -91,6 +97,19 @@ export default async function VerifyPage({
                 <div className="mt-1 font-mono">{match.student.credentialId}</div>
               </div>
             </div>
+
+            <a
+              href={buildLinkedInAddUrl({
+                courseName: match.cohort.courseName,
+                credentialId: match.student.credentialId!,
+                verifyUrl: `${getBaseUrl()}/verify/${match.student.credentialId}`,
+                issuedAt: new Date(match.student.issuedAt!),
+              })}
+              target="_blank"
+              className="brand-button-secondary"
+            >
+              Add to LinkedIn
+            </a>
           </>
         )}
       </div>
