@@ -1,25 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_COOKIE, verifyAdminToken, timingSafeEqualStrings } from "@/lib/auth";
+import { ADMIN_COOKIE, verifyAdminToken, hasValidAutomationKey } from "@/lib/auth";
 
 export const ADMIN_BASE_HEADER = "x-admin-base";
 
 // Machine-to-machine callers (e.g. a Google Apps Script tied to a quiz form)
-// can't do cookie-based login, so this one endpoint additionally accepts a
-// bearer token instead of the admin session cookie. Deliberately scoped to
-// just this route — automation can add a completed student, nothing else.
-const AUTOMATION_ROUTE_RE = /^\/api\/admin\/cohorts\/[^/]+\/students$/;
+// authenticate with a bearer token against this one fixed-purpose route
+// instead of the admin cookie. It lives outside /api/admin entirely — never
+// give it the run of the general admin students endpoint, and never let it
+// carry client-supplied authorization flags (requireExisting, force, etc.);
+// the route handler hardcodes those itself and re-checks the token again.
+const AUTOMATION_ROUTE_RE = /^\/api\/automation\/cohorts\/[^/]+\/students$/;
 
 function getAdminPath(): string {
   const raw = process.env.ADMIN_PATH?.trim().replace(/^\/+|\/+$/g, "");
   return raw && raw.length > 0 ? raw : "admin";
-}
-
-function hasValidAutomationKey(request: NextRequest): boolean {
-  const key = process.env.AUTOMATION_API_KEY;
-  if (!key) return false;
-  const header = request.headers.get("authorization");
-  if (!header?.startsWith("Bearer ")) return false;
-  return timingSafeEqualStrings(header.slice(7), key);
 }
 
 function rewriteToInternalAdmin(request: NextRequest, adminSegment: string) {
@@ -33,6 +27,16 @@ function rewriteToInternalAdmin(request: NextRequest, adminSegment: string) {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // The automation route is fixed-purpose and lives outside /api/admin, so
+  // it's gated here on the bearer token alone rather than the admin cookie
+  // flow below. The route handler re-verifies the token itself too.
+  if (request.method === "POST" && AUTOMATION_ROUTE_RE.test(pathname)) {
+    return hasValidAutomationKey(request)
+      ? NextResponse.next()
+      : NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const adminPath = getAdminPath();
   const adminSegment = `/${adminPath}`;
   const isCustomAdminPath = adminPath !== "admin";
@@ -47,14 +51,6 @@ export async function proxy(request: NextRequest) {
   const isAdminApiRequest = pathname.startsWith("/api/admin");
 
   if (!isAdminPageRequest && !isAdminApiRequest) {
-    return NextResponse.next();
-  }
-
-  if (
-    request.method === "POST" &&
-    AUTOMATION_ROUTE_RE.test(pathname) &&
-    hasValidAutomationKey(request)
-  ) {
     return NextResponse.next();
   }
 

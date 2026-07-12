@@ -42,3 +42,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# roster / form-response exports — real student data, never commit.
+# Synthetic sample CSVs belong in examples/ instead.
+/*.csv
+!examples/**/*.csv
+
+# local Claude Code settings/permissions — may contain commands with
+# real credentials pasted in during a session.
+.claude/settings.local.json

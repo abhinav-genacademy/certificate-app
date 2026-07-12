@@ -44,3 +44,23 @@ create table if not exists weekly_submissions (
   last_name text not null default '',
   primary key (cohort_id, week, email)
 );
+
+-- Backs lib/rate-limit.ts — a plain fixed-window counter per bucket key
+-- (e.g. "claim:1.2.3.4"). Rows are pruned by the limiter itself as it goes.
+create table if not exists rate_limit_hits (
+  id bigserial primary key,
+  bucket text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists rate_limit_hits_bucket_created_idx on rate_limit_hits(bucket, created_at);
+
+-- Every call to /api/automation/cohorts/[id]/students, regardless of outcome.
+create table if not exists automation_audit_log (
+  id bigserial primary key,
+  cohort_id uuid,
+  email text,
+  outcome text not null,
+  ip text,
+  created_at timestamptz not null default now()
+);
+create index if not exists automation_audit_log_created_idx on automation_audit_log(created_at);

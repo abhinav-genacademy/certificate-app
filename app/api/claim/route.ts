@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findByIdentity, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
 import { generateCertificateForStudent } from "@/lib/generate-certificate";
 import { buildLinkedInAddUrl } from "@/lib/linkedin";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,6 +15,16 @@ function getBaseUrl(): string {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  // Cheap first line of defense against hammering this public, unauthenticated
+  // endpoint — a match here can trigger a real Chromium render below.
+  if (!(await checkRateLimit(`claim:${ip}`, 10, 60))) {
+    return NextResponse.json(
+      { error: "Too many attempts — please wait a minute and try again." },
+      { status: 429 }
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const firstName = typeof body?.firstName === "string" ? body.firstName.trim() : "";
   const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
@@ -23,6 +34,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "First name, last name, and email are required" },
       { status: 400 }
+    );
+  }
+
+  if (!(await checkRateLimit(`claim-identity:${email.toLowerCase()}`, 5, 60))) {
+    return NextResponse.json(
+      { error: "Too many attempts for this email — please wait a minute and try again." },
+      { status: 429 }
     );
   }
 

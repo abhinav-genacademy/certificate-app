@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCohort, getMissingRequirements, getWeeklySubmissions, upsertRoster } from "@/lib/store";
+import { getCohort, upsertRoster } from "@/lib/store";
 import { EMAIL_RE } from "@/lib/roster";
-import { generateCertificateForStudent } from "@/lib/generate-certificate";
 
-export const runtime = "nodejs";
-export const maxDuration = 60;
-
+// Admin manual-add only — reachable solely via the admin cookie (see
+// proxy.ts). Always creates/updates the student outright and never
+// generates a certificate; use the separate "Generate" action for that.
+// The automation integration has its own endpoint at
+// /api/automation/cohorts/[id]/students with its own fixed authorization.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,8 +23,6 @@ export async function POST(
     const firstName = typeof body?.firstName === "string" ? body.firstName.trim() : "";
     const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-    const generateImmediately = Boolean(body?.generateImmediately);
-    const requireExisting = Boolean(body?.requireExisting);
 
     if (!firstName) {
       return NextResponse.json({ error: "First name is required" }, { status: 400 });
@@ -32,69 +31,9 @@ export async function POST(
       return NextResponse.json({ error: "A valid email is required" }, { status: 400 });
     }
 
-    const {
-      created,
-      updated,
-      skipped,
-      cohort: updatedCohort,
-    } = await upsertRoster(cohortId, [{ firstName, lastName, email }], { requireExisting });
+    const { created, updated } = await upsertRoster(cohortId, [{ firstName, lastName, email }]);
 
-    if (skipped > 0) {
-      return NextResponse.json({
-        created,
-        updated,
-        skipped: true,
-        message: "This email isn't on the cohort's roster — not added, no certificate issued.",
-      });
-    }
-
-    if (!generateImmediately) {
-      return NextResponse.json({ created, updated });
-    }
-
-    const student = updatedCohort.students.find((s) => s.email === email);
-    if (!student) {
-      return NextResponse.json({ created, updated });
-    }
-
-    if (student.revokedAt) {
-      // Never auto-regenerate a revoked certificate.
-      return NextResponse.json({ created, updated });
-    }
-
-    if (!student.credentialId && student.source !== "manual") {
-      const [week2, week3] = await Promise.all([
-        getWeeklySubmissions(cohortId, "week2"),
-        getWeeklySubmissions(cohortId, "week3"),
-      ]);
-      const missing = getMissingRequirements(week2, week3, student.email);
-      if (missing.length > 0) {
-        return NextResponse.json({
-          created,
-          updated,
-          eligible: false,
-          missingRequirements: missing,
-          message: `Please submit the following before your certificate can be issued: ${missing.join(", ")}.`,
-        });
-      }
-    }
-
-    // Reuse the cohort we already have in hand instead of re-reading it —
-    // a read immediately after upsertRoster's write can lag (Blob's list()
-    // lookup isn't guaranteed instant-consistent with a just-completed write).
-    const result = student.credentialId
-      ? { credentialId: student.credentialId, certificateUrl: student.certificateUrl! }
-      : await generateCertificateForStudent(updatedCohort, student.id);
-
-    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-
-    return NextResponse.json({
-      created,
-      updated,
-      credentialId: result.credentialId,
-      certificateUrl: result.certificateUrl,
-      verifyUrl: `${baseUrl}/verify/${result.credentialId}`,
-    });
+    return NextResponse.json({ created, updated });
   } catch (error) {
     console.error("Failed to add student:", error);
     const message = error instanceof Error ? error.message : "Failed to add student";
