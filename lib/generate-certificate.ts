@@ -2,6 +2,7 @@ import { deriveCredentialId } from "@/lib/credential";
 import { generateQrDataUrl } from "@/lib/qr";
 import { renderCertificatePng } from "@/lib/certificate-render";
 import { markStudentIssued, type Cohort } from "@/lib/store";
+import type { CertificateTheme } from "@/lib/certificate-template";
 
 function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_BASE_URL;
@@ -22,10 +23,15 @@ function formatIssuedDate(date: Date): string {
 // Takes an already-loaded Cohort rather than a cohortId so callers that just
 // wrote/fetched the cohort don't force another Blob lookup right behind
 // their own write — list()-backed lookups can lag briefly after a write.
-export async function generateCertificateForStudent(cohort: Cohort, studentId: string) {
+export async function generateCertificateForStudent(
+  cohort: Cohort,
+  studentId: string,
+  options?: { theme?: CertificateTheme }
+) {
   const student = cohort.students.find((s) => s.id === studentId);
   if (!student) throw new Error("Student not found");
 
+  const theme = options?.theme ?? student.theme;
   const credentialId = student.credentialId ?? deriveCredentialId(cohort.id, studentId);
   const issuedAt = student.issuedAt ? new Date(student.issuedAt) : new Date();
   const verifyUrl = `${getBaseUrl()}/verify/${credentialId}`;
@@ -37,6 +43,7 @@ export async function generateCertificateForStudent(cohort: Cohort, studentId: s
     issuedDateFormatted: formatIssuedDate(issuedAt),
     credentialId,
     qrDataUrl,
+    theme,
   });
 
   const issuedAtIso = issuedAt.toISOString();
@@ -45,5 +52,6 @@ export async function generateCertificateForStudent(cohort: Cohort, studentId: s
     credentialId,
     certificatePng: png,
     issuedAt: issuedAtIso,
+    theme,
   });
 }

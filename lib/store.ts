@@ -1,4 +1,5 @@
 import { query, sql, transaction } from "@/lib/db-client";
+import type { CertificateTheme } from "@/lib/certificate-template";
 
 export type Student = {
   id: string;
@@ -16,6 +17,10 @@ export type Student = {
   // computed Week 2 ∩ Week 3 roster. Manual entries are exempt from the
   // requirement check and are never removed by a recompute.
   source?: "manual";
+  // Which certificate design was rendered — chosen by the student on the
+  // claim page (defaults to "light" until they pick, e.g. for certificates
+  // an admin generates before the student ever visits).
+  theme: CertificateTheme;
 };
 
 export type WeeklySubmission = { email: string; firstName: string; lastName: string };
@@ -54,6 +59,7 @@ function mapStudentRow(row: any): Student {
     createdAt: isoString(row.created_at),
     updatedAt: isoString(row.updated_at),
     source: row.source ?? undefined,
+    theme: row.theme === "dark" ? "dark" : "light",
   };
 }
 
@@ -114,7 +120,7 @@ export async function getCohort(id: string): Promise<Cohort | null> {
   const studentRows = await query<any>(
     sql`
       SELECT id, cohort_id, first_name, last_name, email, credential_id,
-             certificate_url, issued_at, revoked_at, source, created_at, updated_at
+             certificate_url, issued_at, revoked_at, source, theme, created_at, updated_at
       FROM students WHERE cohort_id = ${id} ORDER BY created_at
     `
   );
@@ -259,12 +265,12 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
 export async function markStudentIssued(
   cohortId: string,
   studentId: string,
-  data: { credentialId: string; certificatePng: Buffer; issuedAt: string }
+  data: { credentialId: string; certificatePng: Buffer; issuedAt: string; theme: CertificateTheme }
 ): Promise<{ credentialId: string; certificateUrl: string; issuedAt: string }> {
   await query(sql`
     UPDATE students
     SET credential_id = ${data.credentialId}, certificate_png = ${data.certificatePng},
-        issued_at = ${data.issuedAt}, revoked_at = NULL, updated_at = now()
+        theme = ${data.theme}, issued_at = ${data.issuedAt}, revoked_at = NULL, updated_at = now()
     WHERE id = ${studentId} AND cohort_id = ${cohortId}
   `);
   return {
@@ -315,7 +321,7 @@ export async function findByCredentialId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await query<any>(sql`
     SELECT s.id, s.cohort_id, s.first_name, s.last_name, s.email, s.credential_id,
-           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.created_at, s.updated_at,
+           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.theme, s.created_at, s.updated_at,
            c.course_name AS c_course_name,
            c.cohort_label AS c_cohort_label, c.created_at AS c_created_at
     FROM students s JOIN cohorts c ON c.id = s.cohort_id
@@ -323,15 +329,18 @@ export async function findByCredentialId(
   `);
   if (rows.length === 0) return null;
   const row = rows[0];
+  const student = mapStudentRow(row);
   return {
     cohort: {
       id: row.cohort_id,
       courseName: row.c_course_name,
       cohortLabel: row.c_cohort_label,
       createdAt: isoString(row.c_created_at),
-      students: [],
+      // Only the matched student, not the full roster — enough for callers
+      // like generateCertificateForStudent that look the student up by ID.
+      students: [student],
     },
-    student: mapStudentRow(row),
+    student,
   };
 }
 
@@ -343,7 +352,7 @@ export async function findByIdentity(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await query<any>(sql`
     SELECT s.id, s.cohort_id, s.first_name, s.last_name, s.email, s.credential_id,
-           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.created_at, s.updated_at,
+           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.theme, s.created_at, s.updated_at,
            c.course_name AS c_course_name,
            c.cohort_label AS c_cohort_label, c.created_at AS c_created_at
     FROM students s JOIN cohorts c ON c.id = s.cohort_id
@@ -351,14 +360,20 @@ export async function findByIdentity(
       AND lower(s.first_name) = lower(${firstName})
       AND lower(s.last_name) = lower(${lastName})
   `);
-  return rows.map((row) => ({
-    cohort: {
-      id: row.cohort_id,
-      courseName: row.c_course_name,
-      cohortLabel: row.c_cohort_label,
-      createdAt: isoString(row.c_created_at),
-      students: [],
-    },
-    student: mapStudentRow(row),
-  }));
+  return rows.map((row) => {
+    const student = mapStudentRow(row);
+    return {
+      cohort: {
+        id: row.cohort_id,
+        courseName: row.c_course_name,
+        cohortLabel: row.c_cohort_label,
+        createdAt: isoString(row.c_created_at),
+        // Only the matched student, not the full roster — enough for
+        // callers like generateCertificateForStudent that look the
+        // student up by ID.
+        students: [student],
+      },
+      student,
+    };
+  });
 }

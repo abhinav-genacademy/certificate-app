@@ -19,6 +19,10 @@ create table if not exists students (
   credential_id text unique,
   certificate_url text,
   certificate_png bytea,
+  -- Which certificate design was rendered, chosen by the student on the
+  -- claim page. Defaults to 'light' for certificates generated before a
+  -- student ever visits (e.g. an admin's bulk "Generate certificates").
+  theme text not null default 'light' check (theme in ('light', 'dark')),
   issued_at timestamptz,
   revoked_at timestamptz,
   -- 'manual' = an admin added this person by hand (an exception the
@@ -31,8 +35,9 @@ create table if not exists students (
   unique (cohort_id, email)
 );
 
--- Safe to re-run against a database created before certificate_png existed.
+-- Safe to re-run against a database created before these columns existed.
 alter table students add column if not exists certificate_png bytea;
+alter table students add column if not exists theme text not null default 'light' check (theme in ('light', 'dark'));
 
 create index if not exists students_credential_id_idx on students(credential_id);
 

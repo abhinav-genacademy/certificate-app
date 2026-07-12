@@ -22,6 +22,7 @@ export default function HomePage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ClaimResult | null>(null);
@@ -35,7 +36,7 @@ export default function HomePage() {
       const res = await fetch("/api/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email }),
+        body: JSON.stringify({ firstName, lastName, email, theme }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -96,6 +97,27 @@ export default function HomePage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs uppercase tracking-[2px] text-muted-grey">
+                Certificate style
+              </label>
+              <div className="flex gap-3">
+                {(["light", "dark"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setTheme(option)}
+                    className={`flex-1 rounded-lg border px-4 py-3 text-sm font-semibold capitalize transition-colors ${
+                      theme === option
+                        ? "border-academy-yellow text-academy-yellow"
+                        : "border-white/15 text-muted-grey hover:border-white/30"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
             </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button type="submit" className="brand-button mt-1" disabled={loading}>

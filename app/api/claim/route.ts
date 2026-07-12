@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findByIdentity, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
 import { generateCertificateForStudent } from "@/lib/generate-certificate";
+import type { CertificateTheme } from "@/lib/certificate-template";
 import { buildLinkedInAddUrl } from "@/lib/linkedin";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
   const firstName = typeof body?.firstName === "string" ? body.firstName.trim() : "";
   const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
   const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const theme: CertificateTheme = body?.theme === "dark" ? "dark" : "light";
 
   if (!firstName || !lastName || !email) {
     return NextResponse.json(
@@ -90,16 +92,41 @@ export async function POST(request: NextRequest) {
           continue;
         }
         try {
-          const result = await generateCertificateForStudent(match.cohort, match.student.id);
+          const result = await generateCertificateForStudent(match.cohort, match.student.id, {
+            theme,
+          });
           match.student.credentialId = result.credentialId;
           match.student.certificateUrl = result.certificateUrl;
           match.student.issuedAt = result.issuedAt;
+          match.student.theme = theme;
         } catch (error) {
           console.error(
             `Failed to generate certificate for student ${match.student.id} in cohort ${match.cohort.id}:`,
             error
           );
         }
+      }
+    }
+
+    // Someone who already has a certificate (e.g. an admin bulk-generated
+    // it before they ever visited) can still pick a theme here — re-render
+    // with their choice so the saved image and the LinkedIn-shared version
+    // always match what they picked.
+    const needsRestyle = matches.filter(
+      (m) => m.student.credentialId && !m.student.revokedAt && m.student.theme !== theme
+    );
+    for (const match of needsRestyle) {
+      try {
+        const result = await generateCertificateForStudent(match.cohort, match.student.id, {
+          theme,
+        });
+        match.student.certificateUrl = result.certificateUrl;
+        match.student.theme = theme;
+      } catch (error) {
+        console.error(
+          `Failed to restyle certificate for student ${match.student.id} in cohort ${match.cohort.id}:`,
+          error
+        );
       }
     }
 
