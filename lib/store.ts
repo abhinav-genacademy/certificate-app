@@ -41,8 +41,14 @@ function isoString(value: unknown): string {
 
 // Certificate images are served from our own DB-backed route, keyed
 // deterministically by credential ID — no need to store/read a URL column.
-function certificateUrlFor(credentialId: string | null): string | null {
-  return credentialId ? `/api/certificates/${credentialId}` : null;
+// The image route sends a long-lived immutable cache header, so a version
+// query tied to updated_at is required — otherwise a browser/CDN that
+// cached the certificate before a theme switch would keep serving the old
+// image at the same URL forever.
+function certificateUrlFor(credentialId: string | null, updatedAt: Date | null): string | null {
+  if (!credentialId) return null;
+  const v = updatedAt ? updatedAt.getTime() : 0;
+  return `/api/certificates/${credentialId}?v=${v}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,7 +59,7 @@ function mapStudentRow(row: any): Student {
     lastName: row.last_name,
     email: row.email,
     credentialId: row.credential_id,
-    certificateUrl: certificateUrlFor(row.credential_id),
+    certificateUrl: certificateUrlFor(row.credential_id, row.updated_at ?? null),
     issuedAt: row.issued_at ? isoString(row.issued_at) : null,
     revokedAt: row.revoked_at ? isoString(row.revoked_at) : null,
     createdAt: isoString(row.created_at),
@@ -267,15 +273,16 @@ export async function markStudentIssued(
   studentId: string,
   data: { credentialId: string; certificatePng: Buffer; issuedAt: string; theme: CertificateTheme }
 ): Promise<{ credentialId: string; certificateUrl: string; issuedAt: string }> {
-  await query(sql`
+  const rows = await query<{ updated_at: Date }>(sql`
     UPDATE students
     SET credential_id = ${data.credentialId}, certificate_png = ${data.certificatePng},
         theme = ${data.theme}, issued_at = ${data.issuedAt}, revoked_at = NULL, updated_at = now()
     WHERE id = ${studentId} AND cohort_id = ${cohortId}
+    RETURNING updated_at
   `);
   return {
     credentialId: data.credentialId,
-    certificateUrl: certificateUrlFor(data.credentialId)!,
+    certificateUrl: certificateUrlFor(data.credentialId, rows[0]?.updated_at ?? null)!,
     issuedAt: data.issuedAt,
   };
 }
@@ -344,36 +351,3 @@ export async function findByCredentialId(
   };
 }
 
-export async function findByIdentity(
-  firstName: string,
-  lastName: string,
-  email: string
-): Promise<{ cohort: Cohort; student: Student }[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = await query<any>(sql`
-    SELECT s.id, s.cohort_id, s.first_name, s.last_name, s.email, s.credential_id,
-           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.theme, s.created_at, s.updated_at,
-           c.course_name AS c_course_name,
-           c.cohort_label AS c_cohort_label, c.created_at AS c_created_at
-    FROM students s JOIN cohorts c ON c.id = s.cohort_id
-    WHERE lower(s.email) = lower(${email})
-      AND lower(s.first_name) = lower(${firstName})
-      AND lower(s.last_name) = lower(${lastName})
-  `);
-  return rows.map((row) => {
-    const student = mapStudentRow(row);
-    return {
-      cohort: {
-        id: row.cohort_id,
-        courseName: row.c_course_name,
-        cohortLabel: row.c_cohort_label,
-        createdAt: isoString(row.c_created_at),
-        // Only the matched student, not the full roster — enough for
-        // callers like generateCertificateForStudent that look the
-        // student up by ID.
-        students: [student],
-      },
-      student,
-    };
-  });
-}
