@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { query, sql } from "@/lib/db-client";
 
 export function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get("x-forwarded-for");
@@ -7,22 +6,30 @@ export function getClientIp(request: NextRequest): string {
   return request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
-// Postgres-backed fixed-window limiter — fine at this app's traffic level,
-// no new infra (Redis/KV) needed. Not perfectly race-free under heavy
-// concurrency, only meant to blunt abuse, not guarantee an exact ceiling.
+// In-memory fixed-window counter, scoped to one serverless instance — resets
+// on cold start and isn't shared across instances, so it's not a hard global
+// ceiling. Acceptable here: every endpoint this guards requires either an
+// unguessable credential ID or a bearer token to reach at all, so the
+// realistic threat is one caller hammering their own access, not distributed
+// abuse across many instances. Kept `async` so existing `await` call sites
+// don't need to change even though the check itself is synchronous.
+const hits = new Map<string, number[]>();
+
 export async function checkRateLimit(
   bucket: string,
   limit: number,
   windowSeconds: number
 ): Promise<boolean> {
-  await query(sql`
-    DELETE FROM rate_limit_hits
-    WHERE bucket = ${bucket} AND created_at < now() - make_interval(secs => ${windowSeconds})
-  `);
-  const rows = await query<{ count: string }>(sql`
-    SELECT count(*) FROM rate_limit_hits WHERE bucket = ${bucket}
-  `);
-  if (Number(rows[0]?.count ?? 0) >= limit) return false;
-  await query(sql`INSERT INTO rate_limit_hits (bucket) VALUES (${bucket})`);
+  const now = Date.now();
+  const windowStart = now - windowSeconds * 1000;
+  const timestamps = (hits.get(bucket) ?? []).filter((t) => t > windowStart);
+
+  if (timestamps.length >= limit) {
+    hits.set(bucket, timestamps);
+    return false;
+  }
+
+  timestamps.push(now);
+  hits.set(bucket, timestamps);
   return true;
 }

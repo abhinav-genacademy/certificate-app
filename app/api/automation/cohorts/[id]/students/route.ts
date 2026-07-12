@@ -4,7 +4,6 @@ import { EMAIL_RE } from "@/lib/roster";
 import { generateCertificateForStudent } from "@/lib/generate-certificate";
 import { hasValidAutomationKey } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { query, sql } from "@/lib/db-client";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -16,15 +15,13 @@ export const maxDuration = 60;
 // always attempted) — a bearer token can never make this route create an
 // arbitrary student or skip the requirement check, unlike the admin-facing
 // /api/admin/cohorts/[id]/students route it used to share.
-async function logCall(cohortId: string, email: string, outcome: string, ip: string) {
-  try {
-    await query(sql`
-      INSERT INTO automation_audit_log (cohort_id, email, outcome, ip)
-      VALUES (${cohortId}, ${email}, ${outcome}, ${ip})
-    `);
-  } catch (error) {
-    console.error("Failed to write automation audit log:", error);
-  }
+//
+// Logged to stdout rather than a DB table — searchable in Vercel's runtime
+// logs, no extra storage to manage for what's a low-volume audit trail.
+function logCall(cohortId: string, email: string, outcome: string, ip: string) {
+  console.log(
+    `[automation-audit] cohort=${cohortId} email=${email} outcome=${outcome} ip=${ip}`
+  );
 }
 
 export async function POST(
@@ -50,7 +47,7 @@ export async function POST(
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
 
   if (!firstName || !email || !EMAIL_RE.test(email)) {
-    await logCall(cohortId, email, "invalid_input", ip);
+    logCall(cohortId, email, "invalid_input", ip);
     return NextResponse.json(
       { error: "A valid first name and email are required" },
       { status: 400 }
@@ -60,7 +57,7 @@ export async function POST(
   try {
     const cohort = await getCohort(cohortId);
     if (!cohort) {
-      await logCall(cohortId, email, "cohort_not_found", ip);
+      logCall(cohortId, email, "cohort_not_found", ip);
       return NextResponse.json({ error: "Cohort not found" }, { status: 404 });
     }
 
@@ -71,7 +68,7 @@ export async function POST(
     );
 
     if (skipped > 0) {
-      await logCall(cohortId, email, "skipped_not_on_roster", ip);
+      logCall(cohortId, email, "skipped_not_on_roster", ip);
       return NextResponse.json({
         skipped: true,
         message: "This email isn't on the cohort's roster — not added, no certificate issued.",
@@ -80,12 +77,12 @@ export async function POST(
 
     const student = updatedCohort.students.find((s) => s.email === email);
     if (!student) {
-      await logCall(cohortId, email, "not_found_after_upsert", ip);
+      logCall(cohortId, email, "not_found_after_upsert", ip);
       return NextResponse.json({ ok: true });
     }
 
     if (student.revokedAt) {
-      await logCall(cohortId, email, "revoked_skip", ip);
+      logCall(cohortId, email, "revoked_skip", ip);
       return NextResponse.json({ ok: true });
     }
 
@@ -96,7 +93,7 @@ export async function POST(
       ]);
       const missing = getMissingRequirements(week2, week3, student.email);
       if (missing.length > 0) {
-        await logCall(cohortId, email, "missing_requirements", ip);
+        logCall(cohortId, email, "missing_requirements", ip);
         return NextResponse.json({ eligible: false, missingRequirements: missing });
       }
     }
@@ -106,7 +103,7 @@ export async function POST(
       : await generateCertificateForStudent(updatedCohort, student.id);
 
     const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-    await logCall(cohortId, email, "issued", ip);
+    logCall(cohortId, email, "issued", ip);
 
     return NextResponse.json({
       credentialId: result.credentialId,
@@ -115,7 +112,7 @@ export async function POST(
     });
   } catch (error) {
     console.error("Automation add-student failed:", error);
-    await logCall(cohortId, email, "error", ip);
+    logCall(cohortId, email, "error", ip);
     const message = error instanceof Error ? error.message : "Failed to add student";
     return NextResponse.json({ error: message }, { status: 500 });
   }
