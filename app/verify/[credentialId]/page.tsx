@@ -44,8 +44,8 @@ export default async function VerifyPage({
             <div className="text-3xl mb-3">⛔</div>
             <h2 className="text-lg font-bold text-red-400">Credential revoked</h2>
             <p className="text-muted-grey text-sm mt-2">
-              This certificate was issued to {match.student.firstName} {match.student.lastName}{" "}
-              for {match.cohort.courseName}, but has since been revoked and is no longer valid.
+              This certificate was issued to {match.student.name} for {match.cohort.courseName},
+              but has since been revoked and is no longer valid.
             </p>
             <p className="text-muted-grey text-xs mt-4 font-mono">{credentialId}</p>
           </div>
@@ -68,15 +68,13 @@ export default async function VerifyPage({
               credentialId={credentialId}
               initialTheme={match.student.theme}
               initialCertificateUrl={match.student.certificateUrl!}
-              recipientLabel={`Certificate for ${match.student.firstName} ${match.student.lastName}`}
+              recipientLabel={`Certificate for ${match.student.name}`}
             />
 
             <div className="brand-card p-6 w-full grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
                 <div className="text-xs uppercase tracking-[2px] text-muted-grey">Recipient</div>
-                <div className="mt-1 font-semibold">
-                  {match.student.firstName} {match.student.lastName}
-                </div>
+                <div className="mt-1 font-semibold">{match.student.name}</div>
               </div>
               <div>
                 <div className="text-xs uppercase tracking-[2px] text-muted-grey">Course</div>

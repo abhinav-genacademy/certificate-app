@@ -38,7 +38,7 @@ export async function generateCertificateForStudent(
   const qrDataUrl = await generateQrDataUrl(verifyUrl);
 
   const png = await renderCertificatePng({
-    recipientName: `${student.firstName} ${student.lastName}`.trim(),
+    recipientName: student.name,
     courseName: cohort.courseName,
     issuedDateFormatted: formatIssuedDate(issuedAt),
     credentialId,

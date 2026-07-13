@@ -1,7 +1,9 @@
 -- The Gen Academy certificate app — Postgres schema (Neon).
 -- Run this once against a fresh database before the app can use it:
 --   psql "$DATABASE_URL" -f db/schema.sql
--- or paste it into Neon's SQL editor.
+-- or paste it into Neon's SQL editor. Safe to re-run against a database
+-- that already has some or all of this — every statement below is
+-- idempotent, including the first_name/last_name -> name migration.
 
 create table if not exists cohorts (
   id uuid primary key,
@@ -13,8 +15,7 @@ create table if not exists cohorts (
 create table if not exists students (
   id uuid primary key,
   cohort_id uuid not null references cohorts(id) on delete cascade,
-  first_name text not null,
-  last_name text not null default '',
+  name text not null,
   email text not null,
   credential_id text unique,
   certificate_url text,
@@ -40,16 +41,63 @@ create table if not exists students (
 alter table students add column if not exists certificate_png bytea;
 alter table students add column if not exists theme text not null default 'light' check (theme in ('light', 'dark'));
 
+-- Migrate first_name/last_name -> a single name column. Guarded by an
+-- information_schema check so it's a no-op once already applied (plain SQL
+-- referencing a since-dropped column inside an unreached IF branch is never
+-- planned/validated by Postgres, so this is safe to leave in permanently).
+alter table students add column if not exists name text;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'students' and column_name = 'first_name'
+  ) then
+    update students
+    set name = trim(both ' ' from coalesce(first_name, '') || ' ' || coalesce(last_name, ''))
+    where name is null;
+    alter table students drop column first_name;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'students' and column_name = 'last_name'
+  ) then
+    alter table students drop column last_name;
+  end if;
+end $$;
+alter table students alter column name set not null;
+
 create index if not exists students_credential_id_idx on students(credential_id);
 
 create table if not exists weekly_submissions (
   cohort_id uuid not null references cohorts(id) on delete cascade,
   week text not null check (week in ('week2', 'week3')),
   email text not null,
-  first_name text not null default '',
-  last_name text not null default '',
+  name text not null default '',
   primary key (cohort_id, week, email)
 );
+
+alter table weekly_submissions add column if not exists name text;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'weekly_submissions' and column_name = 'first_name'
+  ) then
+    update weekly_submissions
+    set name = trim(both ' ' from coalesce(first_name, '') || ' ' || coalesce(last_name, ''))
+    where name is null;
+    alter table weekly_submissions drop column first_name;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'weekly_submissions' and column_name = 'last_name'
+  ) then
+    alter table weekly_submissions drop column last_name;
+  end if;
+end $$;
+update weekly_submissions set name = '' where name is null;
+alter table weekly_submissions alter column name set default '';
+alter table weekly_submissions alter column name set not null;
 
 -- Fallback for cohorts not using the Google Forms quiz integration — an
 -- admin-uploaded CSV of final assessment scores. Only a score > 80 counts

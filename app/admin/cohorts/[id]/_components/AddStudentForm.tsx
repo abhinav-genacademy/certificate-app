@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 
 export function AddStudentForm({ cohortId }: { cohortId: string }) {
   const router = useRouter();
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,15 +18,14 @@ export function AddStudentForm({ cohortId }: { cohortId: string }) {
       const res = await fetch(`/api/admin/cohorts/${cohortId}/students`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email }),
+        body: JSON.stringify({ name, email }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Failed to add student");
         return;
       }
-      setFirstName("");
-      setLastName("");
+      setName("");
       setEmail("");
       router.refresh();
     } finally {
@@ -43,24 +41,14 @@ export function AddStudentForm({ cohortId }: { cohortId: string }) {
         won't be removed if the lists are re-uploaded. Adding an email already in this cohort
         updates their name instead of duplicating them.
       </p>
-      <div className="flex gap-3">
-        <div className="flex-1 flex flex-col gap-2">
-          <label className="text-xs uppercase tracking-[2px] text-muted-grey">First name</label>
-          <input
-            className="brand-input"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
-          />
-        </div>
-        <div className="flex-1 flex flex-col gap-2">
-          <label className="text-xs uppercase tracking-[2px] text-muted-grey">Last name</label>
-          <input
-            className="brand-input"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-          />
-        </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-xs uppercase tracking-[2px] text-muted-grey">Name</label>
+        <input
+          className="brand-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
       </div>
       <div className="flex flex-col gap-2">
         <label className="text-xs uppercase tracking-[2px] text-muted-grey">Email</label>

@@ -16,14 +16,16 @@ export async function GET(
   }
 
   const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
+  // Only students with an actual verify link — nothing to send someone who
+  // hasn't been issued a certificate yet.
+  const issued = cohort.students.filter((s) => s.credentialId);
   const rows = [
-    ["First Name", "Last Name", "Email", "Credential ID", "Verify Link"],
-    ...cohort.students.map((s) => [
-      s.firstName,
-      s.lastName,
+    ["Name", "Email", "Credential ID", "Verify Link"],
+    ...issued.map((s) => [
+      s.name,
       s.email,
-      s.credentialId ?? "",
-      s.credentialId ? `${baseUrl}/verify/${s.credentialId}` : "",
+      s.credentialId!,
+      `${baseUrl}/verify/${s.credentialId}`,
     ]),
   ];
   const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");

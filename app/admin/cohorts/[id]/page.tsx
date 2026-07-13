@@ -29,10 +29,7 @@ export default async function CohortDetailPage({
 
   if (!cohort) notFound();
 
-  const students = [...cohort.students].sort((a, b) => {
-    const byLast = a.lastName.localeCompare(b.lastName);
-    return byLast !== 0 ? byLast : a.firstName.localeCompare(b.firstName);
-  });
+  const students = [...cohort.students].sort((a, b) => a.name.localeCompare(b.name));
   const pendingCount = students.filter((s) => !s.credentialId).length;
 
   return (
@@ -93,7 +90,7 @@ export default async function CohortDetailPage({
                 {students.map((student) => (
                   <tr key={student.id} className="hover:bg-white/[0.03] rounded-lg">
                     <td className="py-2.5 pr-3 rounded-l-lg">
-                      {student.firstName} {student.lastName}
+                      {student.name}
                       {student.source === "manual" && (
                         <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-grey align-middle">
                           Manual
@@ -165,7 +162,7 @@ export default async function CohortDetailPage({
                         <DeleteButton
                           cohortId={cohort.id}
                           studentId={student.id}
-                          studentName={`${student.firstName} ${student.lastName}`.trim()}
+                          studentName={student.name}
                         />
                       </div>
                     </td>

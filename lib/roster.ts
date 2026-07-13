@@ -36,7 +36,7 @@ const SCORE_KEYS = new Set([
   "percent",
 ]);
 
-export type SubmissionRow = { email: string; firstName: string; lastName: string };
+export type SubmissionRow = { email: string; name: string };
 
 export type SubmissionParseResult = {
   submissions: SubmissionRow[];
@@ -46,7 +46,7 @@ export type SubmissionParseResult = {
 // Parses a project-submission export (e.g. a raw Google Forms response
 // CSV) into email + name pairs. Tolerant of extra/duplicate columns and of
 // name being split across First/Last columns or combined in one Full Name
-// column (split on the first space if so).
+// column.
 export function parseSubmissionCsv(csvText: string): SubmissionParseResult {
   const records: Record<string, string>[] = parse(csvText, {
     columns: normalizeHeaders,
@@ -73,22 +73,14 @@ export function parseSubmissionCsv(csvText: string): SubmissionParseResult {
       else if (FULL_NAME_KEYS.has(key) && !fullName) fullName = trimmed;
     }
 
-    if (!firstName && fullName) {
-      const spaceIndex = fullName.indexOf(" ");
-      if (spaceIndex === -1) {
-        firstName = fullName;
-      } else {
-        firstName = fullName.slice(0, spaceIndex);
-        lastName = fullName.slice(spaceIndex + 1);
-      }
-    }
+    const name = fullName || `${firstName} ${lastName}`.trim();
 
     if (!email || !EMAIL_RE.test(email)) {
       skipped++;
       continue;
     }
 
-    byEmail.set(email, { email, firstName, lastName });
+    byEmail.set(email, { email, name });
   }
 
   return { submissions: Array.from(byEmail.values()), skipped };

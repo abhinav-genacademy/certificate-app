@@ -3,8 +3,7 @@ import type { CertificateTheme } from "@/lib/certificate-template";
 
 export type Student = {
   id: string;
-  firstName: string;
-  lastName: string;
+  name: string;
   email: string;
   credentialId: string | null;
   certificateUrl: string | null;
@@ -23,7 +22,7 @@ export type Student = {
   theme: CertificateTheme;
 };
 
-export type WeeklySubmission = { email: string; firstName: string; lastName: string };
+export type WeeklySubmission = { email: string; name: string };
 export type AssessmentScore = { email: string; score: number };
 
 export type Cohort = {
@@ -56,8 +55,7 @@ function certificateUrlFor(credentialId: string | null, updatedAt: Date | null):
 function mapStudentRow(row: any): Student {
   return {
     id: row.id,
-    firstName: row.first_name,
-    lastName: row.last_name,
+    name: row.name,
     email: row.email,
     credentialId: row.credential_id,
     certificateUrl: certificateUrlFor(row.credential_id, row.updated_at ?? null),
@@ -74,11 +72,11 @@ export async function getWeeklySubmissions(
   cohortId: string,
   week: "week2" | "week3"
 ): Promise<WeeklySubmission[]> {
-  const rows = await query<{ email: string; first_name: string; last_name: string }>(sql`
-    SELECT email, first_name, last_name FROM weekly_submissions
+  const rows = await query<{ email: string; name: string }>(sql`
+    SELECT email, name FROM weekly_submissions
     WHERE cohort_id = ${cohortId} AND week = ${week}
   `);
-  return rows.map((r) => ({ email: r.email, firstName: r.first_name, lastName: r.last_name }));
+  return rows.map((r) => ({ email: r.email, name: r.name }));
 }
 
 // Used to gate certificate generation for computed-roster students
@@ -158,7 +156,7 @@ export async function getCohort(id: string): Promise<Cohort | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const studentRows = await query<any>(
     sql`
-      SELECT id, cohort_id, first_name, last_name, email, credential_id,
+      SELECT id, cohort_id, name, email, credential_id,
              certificate_url, issued_at, revoked_at, source, theme, created_at, updated_at
       FROM students WHERE cohort_id = ${id} ORDER BY created_at
     `
@@ -199,7 +197,7 @@ export async function createCohort(input: {
 
 export async function upsertRoster(
   cohortId: string,
-  rows: { firstName: string; lastName: string; email: string }[],
+  rows: { name: string; email: string }[],
   options?: { requireExisting?: boolean }
 ): Promise<{ created: number; updated: number; skipped: number; cohort: Cohort }> {
   const requireExisting = options?.requireExisting ?? false;
@@ -213,7 +211,7 @@ export async function upsertRoster(
     );
     if (existing.length > 0) {
       await query(sql`
-        UPDATE students SET first_name = ${row.firstName}, last_name = ${row.lastName}, updated_at = now()
+        UPDATE students SET name = ${row.name}, updated_at = now()
         WHERE id = ${existing[0].id}
       `);
       updated++;
@@ -226,8 +224,8 @@ export async function upsertRoster(
       // Reached only for manual adds (requireExisting is only set by the
       // Forms automation, which never creates — see the branch above).
       await query(sql`
-        INSERT INTO students (id, cohort_id, first_name, last_name, email, source)
-        VALUES (gen_random_uuid(), ${cohortId}, ${row.firstName}, ${row.lastName}, ${row.email}, 'manual')
+        INSERT INTO students (id, cohort_id, name, email, source)
+        VALUES (gen_random_uuid(), ${cohortId}, ${row.name}, ${row.email}, 'manual')
       `);
       created++;
     }
@@ -247,8 +245,8 @@ export async function setRequirementList(
     sql`DELETE FROM weekly_submissions WHERE cohort_id = ${cohortId} AND week = ${week}`,
     ...submissions.map(
       (s) => sql`
-        INSERT INTO weekly_submissions (cohort_id, week, email, first_name, last_name)
-        VALUES (${cohortId}, ${week}, ${s.email}, ${s.firstName}, ${s.lastName})
+        INSERT INTO weekly_submissions (cohort_id, week, email, name)
+        VALUES (${cohortId}, ${week}, ${s.email}, ${s.name})
       `
     ),
   ]);
@@ -282,17 +280,16 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
         )
     `,
     sql`
-      INSERT INTO students (id, cohort_id, first_name, last_name, email, source, created_at, updated_at)
+      INSERT INTO students (id, cohort_id, name, email, source, created_at, updated_at)
       SELECT gen_random_uuid(), ${cohortId},
-             COALESCE(NULLIF(w3.first_name, ''), w2.first_name),
-             COALESCE(NULLIF(w3.last_name, ''), w2.last_name),
+             COALESCE(NULLIF(w3.name, ''), w2.name),
              w2.email, NULL, now(), now()
       FROM weekly_submissions w2
       JOIN weekly_submissions w3
         ON w3.cohort_id = ${cohortId} AND w3.week = 'week3' AND w3.email = w2.email
       WHERE w2.cohort_id = ${cohortId} AND w2.week = 'week2'
       ON CONFLICT (cohort_id, email) DO UPDATE
-        SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, updated_at = now()
+        SET name = EXCLUDED.name, updated_at = now()
     `,
   ]);
 
@@ -360,7 +357,7 @@ export async function findByCredentialId(
 ): Promise<{ cohort: Cohort; student: Student } | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await query<any>(sql`
-    SELECT s.id, s.cohort_id, s.first_name, s.last_name, s.email, s.credential_id,
+    SELECT s.id, s.cohort_id, s.name, s.email, s.credential_id,
            s.certificate_url, s.issued_at, s.revoked_at, s.source, s.theme, s.created_at, s.updated_at,
            c.course_name AS c_course_name,
            c.cohort_label AS c_cohort_label, c.created_at AS c_created_at

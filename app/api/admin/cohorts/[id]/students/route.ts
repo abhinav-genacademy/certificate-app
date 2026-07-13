@@ -20,18 +20,17 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => null);
-    const firstName = typeof body?.firstName === "string" ? body.firstName.trim() : "";
-    const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
 
-    if (!firstName) {
-      return NextResponse.json({ error: "First name is required" }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
     if (!email || !EMAIL_RE.test(email)) {
       return NextResponse.json({ error: "A valid email is required" }, { status: 400 });
     }
 
-    const { created, updated } = await upsertRoster(cohortId, [{ firstName, lastName, email }]);
+    const { created, updated } = await upsertRoster(cohortId, [{ name, email }]);
 
     return NextResponse.json({ created, updated });
   } catch (error) {
