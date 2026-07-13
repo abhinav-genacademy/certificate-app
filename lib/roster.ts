@@ -27,6 +27,14 @@ const FIRST_NAME_KEYS = new Set(["firstname", "first"]);
 const LAST_NAME_KEYS = new Set(["lastname", "last", "surname"]);
 const FULL_NAME_KEYS = new Set(["fullname", "name"]);
 const EMAIL_KEYS = new Set(["email", "emailaddress", "e-mail"]);
+const SCORE_KEYS = new Set([
+  "score",
+  "finalscore",
+  "assessmentscore",
+  "totalscore",
+  "percentage",
+  "percent",
+]);
 
 export type SubmissionRow = { email: string; firstName: string; lastName: string };
 
@@ -84,4 +92,47 @@ export function parseSubmissionCsv(csvText: string): SubmissionParseResult {
   }
 
   return { submissions: Array.from(byEmail.values()), skipped };
+}
+
+export type AssessmentRow = { email: string; score: number };
+
+export type AssessmentParseResult = {
+  rows: AssessmentRow[];
+  skipped: number;
+};
+
+// Parses a fallback "final assessment" export — just email + score columns —
+// for cohorts not wired up to the Google Forms quiz integration.
+export function parseAssessmentCsv(csvText: string): AssessmentParseResult {
+  const records: Record<string, string>[] = parse(csvText, {
+    columns: normalizeHeaders,
+    skip_empty_lines: true,
+    trim: true,
+    bom: true,
+  });
+
+  const byEmail = new Map<string, AssessmentRow>();
+  let skipped = 0;
+
+  for (const record of records) {
+    let email = "";
+    let scoreRaw = "";
+
+    for (const [rawKey, value] of Object.entries(record)) {
+      const key = stripDuplicateSuffix(rawKey);
+      const trimmed = value?.trim() ?? "";
+      if (EMAIL_KEYS.has(key) && !email && trimmed) email = trimmed.toLowerCase();
+      else if (SCORE_KEYS.has(key) && !scoreRaw && trimmed) scoreRaw = trimmed;
+    }
+
+    const score = Number(scoreRaw);
+    if (!email || !EMAIL_RE.test(email) || scoreRaw === "" || Number.isNaN(score)) {
+      skipped++;
+      continue;
+    }
+
+    byEmail.set(email, { email, score });
+  }
+
+  return { rows: Array.from(byEmail.values()), skipped };
 }

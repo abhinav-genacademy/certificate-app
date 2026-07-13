@@ -24,6 +24,7 @@ export type Student = {
 };
 
 export type WeeklySubmission = { email: string; firstName: string; lastName: string };
+export type AssessmentScore = { email: string; score: number };
 
 export type Cohort = {
   id: string;
@@ -81,20 +82,52 @@ export async function getWeeklySubmissions(
 }
 
 // Used to gate certificate generation for computed-roster students
-// (Forms automation, the batch Generate button, the public claim page) —
+// (Forms automation, the batch Generate button, the automation endpoint) —
 // manually-added students are exempt, callers check student.source first.
-// An empty list for a week means it hasn't been uploaded yet, so it isn't
-// enforced.
+// An empty list/array means that requirement hasn't been uploaded yet, so
+// it isn't enforced — same convention for week2, week3, and assessmentScores.
 export function getMissingRequirements(
   week2: WeeklySubmission[],
   week3: WeeklySubmission[],
+  assessmentScores: AssessmentScore[],
   email: string
 ): string[] {
   const norm = email.trim().toLowerCase();
   const missing: string[] = [];
   if (week2.length > 0 && !week2.some((s) => s.email === norm)) missing.push("Week 2 Project");
   if (week3.length > 0 && !week3.some((s) => s.email === norm)) missing.push("Week 3 Project");
+  if (
+    assessmentScores.length > 0 &&
+    !assessmentScores.some((s) => s.email === norm && s.score > 80)
+  ) {
+    missing.push("Final Assessment");
+  }
   return missing;
+}
+
+export async function getAssessmentScores(cohortId: string): Promise<AssessmentScore[]> {
+  const rows = await query<{ email: string; score: string }>(sql`
+    SELECT email, score FROM assessment_scores WHERE cohort_id = ${cohortId}
+  `);
+  return rows.map((r) => ({ email: r.email, score: Number(r.score) }));
+}
+
+// Fallback path for cohorts not wired up to the Google Forms integration —
+// an admin-uploaded CSV of final assessment scores. Re-uploading replaces
+// the previous list outright, same as setRequirementList does for week2/3.
+export async function setAssessmentScores(
+  cohortId: string,
+  rows: AssessmentScore[]
+): Promise<void> {
+  await transaction([
+    sql`DELETE FROM assessment_scores WHERE cohort_id = ${cohortId}`,
+    ...rows.map(
+      (r) => sql`
+        INSERT INTO assessment_scores (cohort_id, email, score)
+        VALUES (${cohortId}, ${r.email}, ${r.score})
+      `
+    ),
+  ]);
 }
 
 export async function listCohortSummaries(): Promise<CohortSummary[]> {

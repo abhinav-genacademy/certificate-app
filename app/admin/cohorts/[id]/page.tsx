@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCohort, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
+import { getAssessmentScores, getCohort, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
 import { getAdminBasePath } from "@/lib/admin-base-path";
 import { AddStudentForm } from "./_components/AddStudentForm";
 import { GenerateButton } from "./_components/GenerateButton";
@@ -8,6 +8,7 @@ import { GenerateOneButton } from "./_components/GenerateOneButton";
 import { RevokeButton } from "./_components/RevokeButton";
 import { DeleteButton } from "./_components/DeleteButton";
 import { RequirementListsForm } from "./_components/RequirementListsForm";
+import { AssessmentUploadForm } from "./_components/AssessmentUploadForm";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,12 @@ export default async function CohortDetailPage({
 }) {
   const { id } = await params;
 
-  const [cohort, adminBase, week2, week3] = await Promise.all([
+  const [cohort, adminBase, week2, week3, assessmentScores] = await Promise.all([
     getCohort(id),
     getAdminBasePath(),
     getWeeklySubmissions(id, "week2"),
     getWeeklySubmissions(id, "week3"),
+    getAssessmentScores(id),
   ]);
 
   if (!cohort) notFound();
@@ -44,7 +46,15 @@ export default async function CohortDetailPage({
           <h1 className="text-2xl font-bold">{cohort.courseName}</h1>
           <div className="text-muted-grey mt-1">{cohort.cohortLabel}</div>
         </div>
-        <GenerateButton cohortId={cohort.id} pendingCount={pendingCount} />
+        <div className="flex items-center gap-3">
+          <a
+            href={`/api/admin/cohorts/${cohort.id}/export`}
+            className="brand-button-secondary"
+          >
+            Export CSV
+          </a>
+          <GenerateButton cohortId={cohort.id} pendingCount={pendingCount} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -54,6 +64,7 @@ export default async function CohortDetailPage({
             week2Count={week2?.length ?? null}
             week3Count={week3?.length ?? null}
           />
+          <AssessmentUploadForm cohortId={cohort.id} count={assessmentScores.length || null} />
           <AddStudentForm cohortId={cohort.id} />
         </div>
 
@@ -109,7 +120,12 @@ export default async function CohortDetailPage({
                           </span>
                           {(() => {
                             if (student.source === "manual") return null;
-                            const missing = getMissingRequirements(week2, week3, student.email);
+                            const missing = getMissingRequirements(
+                              week2,
+                              week3,
+                              assessmentScores,
+                              student.email
+                            );
                             return missing.length > 0 ? (
                               <span className="text-[11px] text-muted-grey pl-3">
                                 Missing: {missing.join(", ")}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCohort, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
+import { getAssessmentScores, getCohort, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
 import { generateCertificateForStudent } from "@/lib/generate-certificate";
 
 export const runtime = "nodejs";
@@ -33,9 +33,10 @@ export async function POST(
       ? allPending.filter((s) => s.id === studentId)
       : allPending.slice(0, BATCH_SIZE);
 
-    const [week2, week3] = await Promise.all([
+    const [week2, week3, assessmentScores] = await Promise.all([
       getWeeklySubmissions(cohortId, "week2"),
       getWeeklySubmissions(cohortId, "week3"),
+      getAssessmentScores(cohortId),
     ]);
 
     const processed: string[] = [];
@@ -46,7 +47,7 @@ export async function POST(
       const missing =
         force || student.source === "manual"
           ? []
-          : getMissingRequirements(week2, week3, student.email);
+          : getMissingRequirements(week2, week3, assessmentScores, student.email);
       if (missing.length > 0) {
         notEligible.push({ studentId: student.id, missingRequirements: missing });
         continue;

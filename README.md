@@ -2,9 +2,9 @@
 
 Cohort-based certificate issuance. A cohort's roster is built automatically
 from two uploaded CSVs — a student is on the roster once they appear in
-*both* — and generates credentials; students self-serve their certificate by
-verifying their name + email against the roster. Certificates follow the
-brand system in
+*both* — and generates credentials; an admin generates certificates and
+shares each student's personal `/verify/:credentialId` link directly (no
+self-serve lookup). Certificates follow the brand system in
 [`gen_academy_certificate_brand_compressed.md`](./gen_academy_certificate_brand_compressed.md)
 (with a calmer, more print-like typography pass on top).
 
@@ -15,11 +15,8 @@ brand system in
 
 ## How it works
 
-- **Student** (`/`, public — this is the homepage): enters first name, last
-  name, email. If it matches an issued certificate, they see their credential
-  ID, a shareable `/verify/:credentialId` link, a "View certificate" button,
-  and an "Add to LinkedIn" button. (`/claim` still works and just redirects
-  here, in case that link is already shared anywhere.)
+- **Homepage** (`/`, public): just a static notice pointing students at the
+  personal link they were sent — there's no self-serve name/email lookup.
 - **Admin** (hidden behind `ADMIN_PATH`, not `/admin` — see below):
   - Create a cohort (course name + cohort label, e.g. "Mastering Agentic AI" / "Cohort 3").
   - Upload the "Week 2 Project" and "Week 3 Project" submission CSVs (raw
@@ -29,18 +26,28 @@ brand system in
     to match the current lists exactly, including removing anyone who's no
     longer in both (even if they already have a certificate — see the code
     comment on `recomputeRoster` in `lib/store.ts` before relying on this).
+  - **Final assessment scores** (fallback for cohorts not using the Google
+    Forms integration below): upload a CSV of email + score. Only a score
+    above 80 counts as eligible — same "not enforced until uploaded"
+    convention as the Week 2/3 lists.
   - "Add student" adds someone by hand for cases the two lists missed — a
-    manually-added student is exempt from the Week 2/3 check and is never
-    removed by a re-upload.
+    manually-added student is exempt from the Week 2/3 (and assessment)
+    check and is never removed by a re-upload.
   - Click "Generate certificates" to mint a credential ID, render the
     certificate image, and store it — for everyone in the cohort who's
     eligible and doesn't have one yet.
+  - "Export CSV" downloads every student's name, email, credential ID, and
+    `/verify/:credentialId` link — the file you'd actually send out or hand
+    off to whoever emails students.
 - **Verification** (`/verify/:credentialId`, public): shows the certificate
-  image and confirms it's a real credential. This is also where the QR code
-  on the certificate itself points.
+  image, confirms it's a real credential, and lets whoever holds the link
+  pick a light/dark certificate style (re-rendering on the spot). This is
+  also where the QR code on the certificate itself points, and where
+  "Add to LinkedIn" lives.
 - **Google Forms quiz integration** (optional, separate project): a
-  quiz-graded Google Form can auto-add a student and generate their
-  certificate the moment they qualify. Lives in its own repo/folder at
+  quiz-graded Google Form can generate an already-rostered student's
+  certificate the moment they pass, matched by **email only** (no name
+  field needed on the form). Lives in its own repo/folder at
   `../google-forms-certificate-addon` (not part of this app) since it's
   headed toward being a standalone Google Workspace Marketplace listing
   eventually. It talks to this app only via the `AUTOMATION_API_KEY`-gated

@@ -221,7 +221,10 @@ export function buildCertificateHtml(data: CertificateData): string {
     position: relative;
     z-index: 2;
     height: 100%;
-    padding: 56px 90px 44px;
+    /* Frame sits at inset:44px — bottom padding must clear that with real
+       room to spare, or the bottom row (metadata, signatures, QR badge)
+       ends up flush against the border. */
+    padding: 64px 100px 80px;
     display: flex;
     flex-direction: column;
     align-items: center;

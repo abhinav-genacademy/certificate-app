@@ -50,3 +50,14 @@ create table if not exists weekly_submissions (
   last_name text not null default '',
   primary key (cohort_id, week, email)
 );
+
+-- Fallback for cohorts not using the Google Forms quiz integration — an
+-- admin-uploaded CSV of final assessment scores. Only a score > 80 counts
+-- as passing (see getMissingRequirements in lib/store.ts). Empty for a
+-- cohort means "not enforced yet", same convention as weekly_submissions.
+create table if not exists assessment_scores (
+  cohort_id uuid not null references cohorts(id) on delete cascade,
+  email text not null,
+  score numeric not null,
+  primary key (cohort_id, email)
+);

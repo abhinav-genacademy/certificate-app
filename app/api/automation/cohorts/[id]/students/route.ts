@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCohort, getMissingRequirements, getWeeklySubmissions, upsertRoster } from "@/lib/store";
+import { getAssessmentScores, getCohort, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
 import { EMAIL_RE } from "@/lib/roster";
 import { generateCertificateForStudent } from "@/lib/generate-certificate";
 import { hasValidAutomationKey } from "@/lib/auth";
@@ -8,12 +8,15 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Fixed-purpose endpoint for the Google Forms integration: add a student who
-// completed the quiz and, if they're already expected on the roster and
-// eligible, issue their certificate. Every authorization decision here is
-// hardcoded server-side (requireExisting is always true, generation is
-// always attempted) — a bearer token can never make this route create an
-// arbitrary student or skip the requirement check, unlike the admin-facing
+// Fixed-purpose endpoint for the Google Forms integration: given the email
+// of someone who just passed the quiz, issue their certificate if they're
+// already expected on the roster and eligible. Matched by email only — the
+// form no longer collects a name, and this route never creates or renames a
+// student, only confirms + generates for one that already exists. Every
+// authorization decision here is hardcoded server-side (generation is
+// always attempted for an existing, eligible match) — a bearer token can
+// never make this route create an arbitrary student or skip the
+// requirement check, unlike the admin-facing
 // /api/admin/cohorts/[id]/students route it used to share.
 //
 // Logged to stdout rather than a DB table — searchable in Vercel's runtime
@@ -42,16 +45,11 @@ export async function POST(
   }
 
   const body = await request.json().catch(() => null);
-  const firstName = typeof body?.firstName === "string" ? body.firstName.trim() : "";
-  const lastName = typeof body?.lastName === "string" ? body.lastName.trim() : "";
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
 
-  if (!firstName || !email || !EMAIL_RE.test(email)) {
+  if (!email || !EMAIL_RE.test(email)) {
     logCall(cohortId, email, "invalid_input", ip);
-    return NextResponse.json(
-      { error: "A valid first name and email are required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "A valid email is required" }, { status: 400 });
   }
 
   try {
@@ -61,24 +59,13 @@ export async function POST(
       return NextResponse.json({ error: "Cohort not found" }, { status: 404 });
     }
 
-    const { skipped, cohort: updatedCohort } = await upsertRoster(
-      cohortId,
-      [{ firstName, lastName, email }],
-      { requireExisting: true }
-    );
-
-    if (skipped > 0) {
+    const student = cohort.students.find((s) => s.email.toLowerCase() === email);
+    if (!student) {
       logCall(cohortId, email, "skipped_not_on_roster", ip);
       return NextResponse.json({
         skipped: true,
-        message: "This email isn't on the cohort's roster — not added, no certificate issued.",
+        message: "This email isn't on the cohort's roster — no certificate issued.",
       });
-    }
-
-    const student = updatedCohort.students.find((s) => s.email === email);
-    if (!student) {
-      logCall(cohortId, email, "not_found_after_upsert", ip);
-      return NextResponse.json({ ok: true });
     }
 
     if (student.revokedAt) {
@@ -87,11 +74,12 @@ export async function POST(
     }
 
     if (!student.credentialId && student.source !== "manual") {
-      const [week2, week3] = await Promise.all([
+      const [week2, week3, assessmentScores] = await Promise.all([
         getWeeklySubmissions(cohortId, "week2"),
         getWeeklySubmissions(cohortId, "week3"),
+        getAssessmentScores(cohortId),
       ]);
-      const missing = getMissingRequirements(week2, week3, student.email);
+      const missing = getMissingRequirements(week2, week3, assessmentScores, student.email);
       if (missing.length > 0) {
         logCall(cohortId, email, "missing_requirements", ip);
         return NextResponse.json({ eligible: false, missingRequirements: missing });
@@ -100,7 +88,7 @@ export async function POST(
 
     const result = student.credentialId
       ? { credentialId: student.credentialId, certificateUrl: student.certificateUrl! }
-      : await generateCertificateForStudent(updatedCohort, student.id);
+      : await generateCertificateForStudent(cohort, student.id);
 
     const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
     logCall(cohortId, email, "issued", ip);
