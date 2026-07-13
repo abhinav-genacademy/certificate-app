@@ -93,6 +93,21 @@ export type AssessmentParseResult = {
   skipped: number;
 };
 
+// Accepts either a plain number/percentage ("42", "84%") or a raw-points
+// fraction ("42/50") — converted to a 0-100 percentage either way, since
+// that's the scale getMissingRequirements' >80 threshold compares against.
+function parseScoreValue(raw: string): number | null {
+  const fraction = raw.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+  if (fraction) {
+    const numerator = Number(fraction[1]);
+    const denominator = Number(fraction[2]);
+    if (denominator === 0) return null;
+    return (numerator / denominator) * 100;
+  }
+  const plain = Number(raw.replace(/%$/, "").trim());
+  return Number.isNaN(plain) ? null : plain;
+}
+
 // Parses a fallback "final assessment" export — just email + score columns —
 // for cohorts not wired up to the Google Forms quiz integration.
 export function parseAssessmentCsv(csvText: string): AssessmentParseResult {
@@ -117,8 +132,8 @@ export function parseAssessmentCsv(csvText: string): AssessmentParseResult {
       else if (SCORE_KEYS.has(key) && !scoreRaw && trimmed) scoreRaw = trimmed;
     }
 
-    const score = Number(scoreRaw);
-    if (!email || !EMAIL_RE.test(email) || scoreRaw === "" || Number.isNaN(score)) {
+    const score = scoreRaw === "" ? null : parseScoreValue(scoreRaw);
+    if (!email || !EMAIL_RE.test(email) || score === null) {
       skipped++;
       continue;
     }

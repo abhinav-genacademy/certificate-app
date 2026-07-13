@@ -50,8 +50,9 @@ export function AssessmentUploadForm({
         <h2 className="text-lg font-bold">Final assessment scores</h2>
         <p className="text-sm text-muted-grey mt-1">
           Fallback for cohorts not using the Google Form quiz integration — upload a CSV of emails
-          and scores. Only students scoring above 80 are eligible for their certificate.
-          Re-uploading replaces the previous list.
+          and scores. Score can be a raw fraction (e.g. <code>42/50</code>) or a percentage — either
+          way, only students scoring above 80% are eligible for their certificate. Re-uploading
+          replaces the previous list.
         </p>
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-2">
