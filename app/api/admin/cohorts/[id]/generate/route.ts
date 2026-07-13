@@ -1,6 +1,8 @@
+import type { Browser } from "puppeteer-core";
 import { NextRequest, NextResponse } from "next/server";
 import { getAssessmentScores, getCohort, getMissingRequirements, getWeeklySubmissions } from "@/lib/store";
 import { generateCertificateForStudent } from "@/lib/generate-certificate";
+import { launchBrowser } from "@/lib/certificate-render";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -52,26 +54,43 @@ export async function POST(
     const failed: { studentId: string; error: string }[] = [];
     const notEligible: { studentId: string; missingRequirements: string[] }[] = [];
 
-    for (const student of candidates) {
-      if (!studentId && processed.length >= BATCH_SIZE) break;
+    // Launched lazily on the first student that actually needs rendering
+    // (so a call that turns out to have nothing eligible never pays for a
+    // browser at all), then reused for the rest of this batch — Chromium
+    // startup, not the render itself, is the dominant cost of generating
+    // more than one certificate at a time.
+    let browser: Browser | undefined;
+    try {
+      for (const student of candidates) {
+        if (!studentId && processed.length >= BATCH_SIZE) break;
 
-      const missing =
-        force || student.source === "manual"
-          ? []
-          : getMissingRequirements(week2, week3, assessmentScores, student.email);
-      if (missing.length > 0) {
-        notEligible.push({ studentId: student.id, missingRequirements: missing });
-        continue;
+        const missing =
+          force || student.source === "manual"
+            ? []
+            : getMissingRequirements(week2, week3, assessmentScores, student.email);
+        if (missing.length > 0) {
+          notEligible.push({ studentId: student.id, missingRequirements: missing });
+          continue;
+        }
+        try {
+          if (!browser) browser = await launchBrowser();
+          await generateCertificateForStudent(cohort, student.id, { browser });
+          processed.push(student.id);
+        } catch (error) {
+          console.error(`Failed to generate certificate for student ${student.id}:`, error);
+          failed.push({
+            studentId: student.id,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
       }
-      try {
-        await generateCertificateForStudent(cohort, student.id);
-        processed.push(student.id);
-      } catch (error) {
-        console.error(`Failed to generate certificate for student ${student.id}:`, error);
-        failed.push({
-          studentId: student.id,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (error) {
+          console.error("Failed to close shared render browser:", error);
+        }
       }
     }
 

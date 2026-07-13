@@ -1,3 +1,4 @@
+import type { Browser } from "puppeteer-core";
 import { deriveCredentialId } from "@/lib/credential";
 import { generateQrDataUrl } from "@/lib/qr";
 import { renderCertificatePng } from "@/lib/certificate-render";
@@ -26,7 +27,7 @@ function formatIssuedDate(date: Date): string {
 export async function generateCertificateForStudent(
   cohort: Cohort,
   studentId: string,
-  options?: { theme?: CertificateTheme }
+  options?: { theme?: CertificateTheme; browser?: Browser }
 ) {
   const student = cohort.students.find((s) => s.id === studentId);
   if (!student) throw new Error("Student not found");
@@ -37,14 +38,17 @@ export async function generateCertificateForStudent(
   const verifyUrl = `${getBaseUrl()}/verify/${credentialId}`;
   const qrDataUrl = await generateQrDataUrl(verifyUrl);
 
-  const png = await renderCertificatePng({
-    recipientName: student.name,
-    courseName: cohort.courseName,
-    issuedDateFormatted: formatIssuedDate(issuedAt),
-    credentialId,
-    qrDataUrl,
-    theme,
-  });
+  const png = await renderCertificatePng(
+    {
+      recipientName: student.name,
+      courseName: cohort.courseName,
+      issuedDateFormatted: formatIssuedDate(issuedAt),
+      credentialId,
+      qrDataUrl,
+      theme,
+    },
+    options?.browser
+  );
 
   const issuedAtIso = issuedAt.toISOString();
 
