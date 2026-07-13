@@ -29,9 +29,18 @@ export async function POST(
     const force = Boolean(body?.force) && Boolean(studentId);
 
     const allPending = cohort.students.filter((s) => !s.credentialId);
-    const pending = studentId
-      ? allPending.filter((s) => s.id === studentId)
-      : allPending.slice(0, BATCH_SIZE);
+    // For the batch path (no studentId), scan every pending student for
+    // eligibility — cheap, just in-memory comparisons — but only actually
+    // render up to BATCH_SIZE certificates per call, since that's the
+    // expensive Chromium part and what serverless time limits are about.
+    // Scanning the whole list (not just the first BATCH_SIZE) matters:
+    // ineligible students never get a credentialId, so if the batch were
+    // limited to a fixed front slice of `allPending`, a run of ineligible
+    // students at the front would permanently block eligible ones further
+    // back from ever being examined, since they never leave the pending set
+    // — the caller's "stop when a round makes no progress" loop would stall
+    // there even though eligible students exist later in the list.
+    const candidates = studentId ? allPending.filter((s) => s.id === studentId) : allPending;
 
     const [week2, week3, assessmentScores] = await Promise.all([
       getWeeklySubmissions(cohortId, "week2"),
@@ -43,7 +52,9 @@ export async function POST(
     const failed: { studentId: string; error: string }[] = [];
     const notEligible: { studentId: string; missingRequirements: string[] }[] = [];
 
-    for (const student of pending) {
+    for (const student of candidates) {
+      if (!studentId && processed.length >= BATCH_SIZE) break;
+
       const missing =
         force || student.source === "manual"
           ? []
