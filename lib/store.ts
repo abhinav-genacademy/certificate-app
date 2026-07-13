@@ -33,7 +33,10 @@ export type Cohort = {
   students: Student[];
 };
 
-export type CohortSummary = Pick<Cohort, "id" | "courseName" | "cohortLabel" | "createdAt">;
+export type CohortSummary = Pick<Cohort, "id" | "courseName" | "cohortLabel" | "createdAt"> & {
+  studentCount: number;
+  issuedCount: number;
+};
 
 function isoString(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string).toISOString();
@@ -128,18 +131,33 @@ export async function setAssessmentScores(
   ]);
 }
 
+// Dashboard-only view — just the counts each cohort card actually shows
+// ("N/M issued"), via one aggregate query instead of pulling every student
+// row for every cohort (what fetching full Cohort objects here used to do).
 export async function listCohortSummaries(): Promise<CohortSummary[]> {
   const rows = await query<{
     id: string;
     course_name: string;
     cohort_label: string;
     created_at: Date;
-  }>(sql`SELECT id, course_name, cohort_label, created_at FROM cohorts ORDER BY created_at DESC`);
+    student_count: string;
+    issued_count: string;
+  }>(sql`
+    SELECT c.id, c.course_name, c.cohort_label, c.created_at,
+           COUNT(s.id) AS student_count,
+           COUNT(s.credential_id) AS issued_count
+    FROM cohorts c
+    LEFT JOIN students s ON s.cohort_id = c.id
+    GROUP BY c.id
+    ORDER BY c.created_at DESC
+  `);
   return rows.map((r) => ({
     id: r.id,
     courseName: r.course_name,
     cohortLabel: r.cohort_label,
     createdAt: isoString(r.created_at),
+    studentCount: Number(r.student_count),
+    issuedCount: Number(r.issued_count),
   }));
 }
 

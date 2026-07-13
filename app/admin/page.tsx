@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listCohortSummaries, getCohort } from "@/lib/store";
+import { listCohortSummaries } from "@/lib/store";
 import { getAdminBasePath } from "@/lib/admin-base-path";
 import { LogoutButton } from "./_components/LogoutButton";
 import { CreateCohortForm } from "./_components/CreateCohortForm";
@@ -7,10 +7,7 @@ import { CreateCohortForm } from "./_components/CreateCohortForm";
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  const [summaries, adminBase] = await Promise.all([listCohortSummaries(), getAdminBasePath()]);
-  const cohorts = (await Promise.all(summaries.map((s) => getCohort(s.id)))).filter(
-    (c) => c !== null
-  );
+  const [cohorts, adminBase] = await Promise.all([listCohortSummaries(), getAdminBasePath()]);
 
   return (
     <main className="min-h-screen p-8 md:p-12 max-w-5xl mx-auto">
@@ -34,29 +31,26 @@ export default async function AdminDashboardPage() {
               No cohorts yet — create one to get started.
             </div>
           )}
-          {cohorts.map((cohort) => {
-            const issued = cohort.students.filter((s) => s.credentialId).length;
-            return (
-              <Link
-                key={cohort.id}
-                href={`${adminBase}/cohorts/${cohort.id}`}
-                className="brand-card p-6 flex items-center justify-between hover:border-academy-yellow/40 hover:-translate-y-0.5 transition"
-              >
-                <div>
-                  <div className="font-bold text-lg">{cohort.courseName}</div>
-                  <div className="text-sm text-muted-grey mt-0.5">{cohort.cohortLabel}</div>
+          {cohorts.map((cohort) => (
+            <Link
+              key={cohort.id}
+              href={`${adminBase}/cohorts/${cohort.id}`}
+              className="brand-card p-6 flex items-center justify-between hover:border-academy-yellow/40 hover:-translate-y-0.5 transition"
+            >
+              <div>
+                <div className="font-bold text-lg">{cohort.courseName}</div>
+                <div className="text-sm text-muted-grey mt-0.5">{cohort.cohortLabel}</div>
+              </div>
+              <div className="text-sm text-right">
+                <div className="text-academy-yellow font-semibold">
+                  {cohort.issuedCount}/{cohort.studentCount} issued
                 </div>
-                <div className="text-sm text-right">
-                  <div className="text-academy-yellow font-semibold">
-                    {issued}/{cohort.students.length} issued
-                  </div>
-                  <div className="text-muted-grey mt-0.5">
-                    {new Date(cohort.createdAt).toLocaleDateString()}
-                  </div>
+                <div className="text-muted-grey mt-0.5">
+                  {new Date(cohort.createdAt).toLocaleDateString()}
                 </div>
-              </Link>
-            );
-          })}
+              </div>
+            </Link>
+          ))}
         </div>
 
         <CreateCohortForm adminBase={adminBase} />
