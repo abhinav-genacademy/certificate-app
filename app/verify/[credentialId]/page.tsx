@@ -1,6 +1,5 @@
 import { findByCredentialId } from "@/lib/store";
 import { buildLinkedInAddUrl } from "@/lib/linkedin";
-import { ThemeSwitcher } from "./_components/ThemeSwitcher";
 
 export const dynamic = "force-dynamic";
 
@@ -64,11 +63,10 @@ export default async function VerifyPage({
               ✓ Verified credential
             </div>
 
-            <ThemeSwitcher
-              credentialId={credentialId}
-              initialTheme={match.student.theme}
-              initialCertificateUrl={match.student.certificateUrl!}
-              recipientLabel={`Certificate for ${match.student.name}`}
+            <img
+              src={match.student.certificateUrl!}
+              alt={`Certificate for ${match.student.name}`}
+              className="w-full rounded-lg border border-white/10"
             />
 
             <div className="brand-card p-6 w-full grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">

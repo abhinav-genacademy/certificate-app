@@ -1,17 +1,7 @@
 import type { Browser } from "puppeteer-core";
 import { deriveCredentialId } from "@/lib/credential";
-import { generateQrDataUrl } from "@/lib/qr";
 import { renderCertificatePng } from "@/lib/certificate-render";
 import { markStudentIssued, type Cohort } from "@/lib/store";
-import type { CertificateTheme } from "@/lib/certificate-template";
-
-function getBaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_BASE_URL;
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_BASE_URL environment variable is not set");
-  }
-  return url.replace(/\/$/, "");
-}
 
 function formatIssuedDate(date: Date): string {
   return date.toLocaleDateString("en-US", {
@@ -27,16 +17,13 @@ function formatIssuedDate(date: Date): string {
 export async function generateCertificateForStudent(
   cohort: Cohort,
   studentId: string,
-  options?: { theme?: CertificateTheme; browser?: Browser }
+  options?: { browser?: Browser }
 ) {
   const student = cohort.students.find((s) => s.id === studentId);
   if (!student) throw new Error("Student not found");
 
-  const theme = options?.theme ?? student.theme;
   const credentialId = student.credentialId ?? deriveCredentialId(cohort.id, studentId);
   const issuedAt = student.issuedAt ? new Date(student.issuedAt) : new Date();
-  const verifyUrl = `${getBaseUrl()}/verify/${credentialId}`;
-  const qrDataUrl = await generateQrDataUrl(verifyUrl);
 
   const png = await renderCertificatePng(
     {
@@ -44,8 +31,6 @@ export async function generateCertificateForStudent(
       courseName: cohort.courseName,
       issuedDateFormatted: formatIssuedDate(issuedAt),
       credentialId,
-      qrDataUrl,
-      theme,
     },
     options?.browser
   );
@@ -56,6 +41,5 @@ export async function generateCertificateForStudent(
     credentialId,
     certificatePng: png,
     issuedAt: issuedAtIso,
-    theme,
   });
 }

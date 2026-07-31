@@ -20,11 +20,6 @@ create table if not exists students (
   credential_id text unique,
   certificate_url text,
   certificate_png bytea,
-  -- Which certificate design was rendered, chosen by the student on their
-  -- /verify/<credentialId> link. Defaults to 'light' for certificates
-  -- generated before a student ever visits (e.g. an admin's bulk
-  -- "Generate certificates").
-  theme text not null default 'light' check (theme in ('light', 'dark')),
   issued_at timestamptz,
   revoked_at timestamptz,
   -- 'manual' = an admin added this person by hand (an exception the
@@ -39,7 +34,11 @@ create table if not exists students (
 
 -- Safe to re-run against a database created before these columns existed.
 alter table students add column if not exists certificate_png bytea;
-alter table students add column if not exists theme text not null default 'light' check (theme in ('light', 'dark'));
+
+-- There is only ever one certificate design now (matches the approved Canva
+-- source) — drop the per-student style choice and the theme-switcher UI
+-- that used to write it.
+alter table students drop column if exists theme;
 
 -- Migrate first_name/last_name -> a single name column. Guarded by an
 -- information_schema check so it's a no-op once already applied (plain SQL

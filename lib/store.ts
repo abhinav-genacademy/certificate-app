@@ -1,5 +1,4 @@
 import { query, sql, transaction } from "@/lib/db-client";
-import type { CertificateTheme } from "@/lib/certificate-template";
 
 export type Student = {
   id: string;
@@ -16,10 +15,6 @@ export type Student = {
   // computed Week 2 ∩ Week 3 roster. Manual entries are exempt from the
   // requirement check and are never removed by a recompute.
   source?: "manual";
-  // Which certificate design was rendered — chosen by the student on the
-  // claim page (defaults to "light" until they pick, e.g. for certificates
-  // an admin generates before the student ever visits).
-  theme: CertificateTheme;
 };
 
 export type WeeklySubmission = { email: string; name: string };
@@ -46,7 +41,7 @@ function isoString(value: unknown): string {
 // deterministically by credential ID — no need to store/read a URL column.
 // The image route sends a long-lived immutable cache header, so a version
 // query tied to updated_at is required — otherwise a browser/CDN that
-// cached the certificate before a theme switch would keep serving the old
+// cached the certificate before a regeneration would keep serving the old
 // image at the same URL forever.
 function certificateUrlFor(credentialId: string | null, updatedAt: Date | null): string | null {
   if (!credentialId) return null;
@@ -67,7 +62,6 @@ function mapStudentRow(row: any): Student {
     createdAt: isoString(row.created_at),
     updatedAt: isoString(row.updated_at),
     source: row.source ?? undefined,
-    theme: row.theme === "dark" ? "dark" : "light",
   };
 }
 
@@ -175,7 +169,7 @@ export async function getCohort(id: string): Promise<Cohort | null> {
   const studentRows = await query<any>(
     sql`
       SELECT id, cohort_id, name, email, credential_id,
-             certificate_url, issued_at, revoked_at, source, theme, created_at, updated_at
+             certificate_url, issued_at, revoked_at, source, created_at, updated_at
       FROM students WHERE cohort_id = ${id} ORDER BY created_at
     `
   );
@@ -319,12 +313,12 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
 export async function markStudentIssued(
   cohortId: string,
   studentId: string,
-  data: { credentialId: string; certificatePng: Buffer; issuedAt: string; theme: CertificateTheme }
+  data: { credentialId: string; certificatePng: Buffer; issuedAt: string }
 ): Promise<{ credentialId: string; certificateUrl: string; issuedAt: string }> {
   const rows = await query<{ updated_at: Date }>(sql`
     UPDATE students
     SET credential_id = ${data.credentialId}, certificate_png = ${data.certificatePng},
-        theme = ${data.theme}, issued_at = ${data.issuedAt}, revoked_at = NULL, updated_at = now()
+        issued_at = ${data.issuedAt}, revoked_at = NULL, updated_at = now()
     WHERE id = ${studentId} AND cohort_id = ${cohortId}
     RETURNING updated_at
   `);
@@ -376,7 +370,7 @@ export async function findByCredentialId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await query<any>(sql`
     SELECT s.id, s.cohort_id, s.name, s.email, s.credential_id,
-           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.theme, s.created_at, s.updated_at,
+           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.created_at, s.updated_at,
            c.course_name AS c_course_name,
            c.cohort_label AS c_cohort_label, c.created_at AS c_created_at
     FROM students s JOIN cohorts c ON c.id = s.cohort_id
