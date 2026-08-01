@@ -281,18 +281,17 @@ export function buildCertificateHtml(data: CertificateData): string {
      overflow into the headline above and the divider below. top here is
      the box's vertical CENTER (not its top edge) with height:auto, so
      wrapping grows the box symmetrically instead of only downward. */
-  /* left:50%/translateX(-50%) instead of a fixed left+width, so the
+  /* left:50%/translate(-50%,-50%) instead of a fixed left+width, so the
      render-time expand-to-fit step (certificate-render.ts) can grow this
-     box wider for a long name and have it stay centered automatically,
-     rather than needing to recompute left every time it resizes.
-     top-anchored (not vertically centered) — growing downward toward the
-     divider at 532px leaves ~149px of headroom for a 2nd line, versus only
-     ~52px if centered symmetrically around the old single-line midpoint,
-     which is too little room and collides with "THIS IS PROUDLY AWARDED
-     TO" above before a 2nd line ever gets used. */
+     box wider (or, if truly needed, shrink its font) for a long name and
+     have it stay centered automatically. top is the true vertical midpoint
+     between "THIS IS PROUDLY AWARDED TO" (bottom ~379px) and the gold
+     divider/diamond below (top ~527px) — (379+527)/2 — which happens to
+     split the available space almost exactly evenly (~74px each side), so
+     centering here doesn't reintroduce the earlier collision problem. */
   .recipient-name {
-    left: 50%; top: 375px; width: 460px; height: auto;
-    transform: translateX(-50%);
+    left: 50%; top: 453px; width: 460px; height: auto;
+    transform: translate(-50%, -50%);
     font-family: "Cormorant Garamond", Georgia, serif;
     font-size: 97px;
     font-weight: 600;
