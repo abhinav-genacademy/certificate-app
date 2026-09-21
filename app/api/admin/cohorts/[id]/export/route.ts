@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCohort } from "@/lib/store";
 
 function csvEscape(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  // Keep formulas as text even if a spreadsheet ignores leading whitespace/control characters.
+  const text = /^[\s\u0000-\u001f\u007f-\u009f]*[=+@-]/.test(value) ? `'${value}` : value;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 export async function GET(

@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 export function GenerateOneButton({
   cohortId,
   studentId,
+  regenerate = false,
 }: {
   cohortId: string;
   studentId: string;
+  regenerate?: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -44,9 +46,11 @@ export function GenerateOneButton({
         onClick={handleClick}
         disabled={loading}
         className="text-academy-yellow hover:underline disabled:opacity-50"
-        title="Generate this person's certificate now, regardless of the Week 2/3 check"
+        title={regenerate
+          ? "Regenerate this person's certificate image with their current name"
+          : "Generate this person's certificate now, regardless of the Week 2/3 check"}
       >
-        {loading ? "Generating..." : "Generate"}
+        {loading ? "Generating..." : regenerate ? "Regenerate" : "Generate"}
       </button>
       {error && <span className="text-xs text-red-400">{error}</span>}
     </span>

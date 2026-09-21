@@ -56,7 +56,9 @@ function mapStudentRow(row: any): Student {
     name: row.name,
     email: row.email,
     credentialId: row.credential_id,
-    certificateUrl: certificateUrlFor(row.credential_id, row.updated_at ?? null),
+    certificateUrl: row.has_certificate
+      ? certificateUrlFor(row.credential_id, row.updated_at ?? null)
+      : null,
     issuedAt: row.issued_at ? isoString(row.issued_at) : null,
     revokedAt: row.revoked_at ? isoString(row.revoked_at) : null,
     createdAt: isoString(row.created_at),
@@ -169,7 +171,8 @@ export async function getCohort(id: string): Promise<Cohort | null> {
   const studentRows = await query<any>(
     sql`
       SELECT id, cohort_id, name, email, credential_id,
-             certificate_url, issued_at, revoked_at, source, created_at, updated_at
+             certificate_url, certificate_png IS NOT NULL AS has_certificate,
+             issued_at, revoked_at, source, created_at, updated_at
       FROM students WHERE cohort_id = ${id} ORDER BY created_at
     `
   );
@@ -222,9 +225,12 @@ export async function upsertRoster(
       sql`SELECT id FROM students WHERE cohort_id = ${cohortId} AND email = ${row.email}`
     );
     if (existing.length > 0) {
+      // Keep the credential identity, but never show an image bearing the
+      // previous name. Generation can repair the missing image in a batch.
       await query(sql`
-        UPDATE students SET name = ${row.name}, updated_at = now()
-        WHERE id = ${existing[0].id}
+        UPDATE students
+        SET name = ${row.name}, certificate_png = NULL, updated_at = now()
+        WHERE id = ${existing[0].id} AND name IS DISTINCT FROM ${row.name}
       `);
       updated++;
     } else if (requireExisting) {
@@ -301,7 +307,8 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
         ON w3.cohort_id = ${cohortId} AND w3.week = 'week3' AND w3.email = w2.email
       WHERE w2.cohort_id = ${cohortId} AND w2.week = 'week2'
       ON CONFLICT (cohort_id, email) DO UPDATE
-        SET name = EXCLUDED.name, updated_at = now()
+        SET name = EXCLUDED.name, certificate_png = NULL, updated_at = now()
+        WHERE students.name IS DISTINCT FROM EXCLUDED.name
     `,
   ]);
 
@@ -313,18 +320,23 @@ async function recomputeRoster(cohortId: string): Promise<Cohort> {
 export async function markStudentIssued(
   cohortId: string,
   studentId: string,
-  data: { credentialId: string; certificatePng: Buffer; issuedAt: string }
+  data: { credentialId: string; certificatePng: Buffer; issuedAt: string; recipientName: string }
 ): Promise<{ credentialId: string; certificateUrl: string; issuedAt: string }> {
+  // A regeneration must not restore a revoked credential. Check the name
+  // too, so an edit made while Chromium is rendering cannot save an old PNG.
   const rows = await query<{ updated_at: Date }>(sql`
     UPDATE students
     SET credential_id = ${data.credentialId}, certificate_png = ${data.certificatePng},
-        issued_at = ${data.issuedAt}, revoked_at = NULL, updated_at = now()
-    WHERE id = ${studentId} AND cohort_id = ${cohortId}
+        issued_at = ${data.issuedAt}, updated_at = now()
+    WHERE id = ${studentId} AND cohort_id = ${cohortId} AND name = ${data.recipientName}
     RETURNING updated_at
   `);
+  if (rows.length === 0) {
+    throw new Error("Student was removed or renamed during generation. Refresh and try again.");
+  }
   return {
     credentialId: data.credentialId,
-    certificateUrl: certificateUrlFor(data.credentialId, rows[0]?.updated_at ?? null)!,
+    certificateUrl: certificateUrlFor(data.credentialId, rows[0].updated_at)!,
     issuedAt: data.issuedAt,
   };
 }
@@ -370,7 +382,8 @@ export async function findByCredentialId(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await query<any>(sql`
     SELECT s.id, s.cohort_id, s.name, s.email, s.credential_id,
-           s.certificate_url, s.issued_at, s.revoked_at, s.source, s.created_at, s.updated_at,
+           s.certificate_url, s.certificate_png IS NOT NULL AS has_certificate,
+           s.issued_at, s.revoked_at, s.source, s.created_at, s.updated_at,
            c.course_name AS c_course_name,
            c.cohort_label AS c_cohort_label, c.created_at AS c_created_at
     FROM students s JOIN cohorts c ON c.id = s.cohort_id

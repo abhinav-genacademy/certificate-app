@@ -17,7 +17,7 @@ export default async function VerifyPage({
 
   const match = await findByCredentialId(credentialId);
   const isRevoked = Boolean(match?.student.revokedAt);
-  const isValid = Boolean(match?.student.certificateUrl && match?.student.issuedAt) && !isRevoked;
+  const isValid = Boolean(match?.student.credentialId && match?.student.issuedAt) && !isRevoked;
 
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
@@ -63,11 +63,17 @@ export default async function VerifyPage({
               ✓ Verified credential
             </div>
 
-            <img
-              src={match.student.certificateUrl!}
-              alt={`Certificate for ${match.student.name}`}
-              className="w-full rounded-lg border border-white/10"
-            />
+            {match.student.certificateUrl ? (
+              <img
+                src={match.student.certificateUrl}
+                alt={`Certificate for ${match.student.name}`}
+                className="w-full rounded-lg border border-white/10"
+              />
+            ) : (
+              <p className="brand-card p-6 w-full text-center text-sm text-muted-grey">
+                The certificate image is awaiting an update. The credential remains valid.
+              </p>
+            )}
 
             <div className="brand-card p-6 w-full grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>

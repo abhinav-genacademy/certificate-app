@@ -30,7 +30,7 @@ export default async function CohortDetailPage({
   if (!cohort) notFound();
 
   const students = [...cohort.students].sort((a, b) => a.name.localeCompare(b.name));
-  const pendingCount = students.filter((s) => !s.credentialId).length;
+  const pendingCount = students.filter((s) => !s.credentialId || !s.certificateUrl).length;
 
   return (
     <main className="min-h-screen p-8 md:p-12 max-w-5xl mx-auto">
@@ -107,7 +107,7 @@ export default async function CohortDetailPage({
                       ) : student.credentialId ? (
                         <span className="inline-flex items-center gap-1.5 text-academy-yellow">
                           <span className="w-1.5 h-1.5 rounded-full bg-academy-yellow" />
-                          Issued
+                          {student.certificateUrl ? "Issued" : "Needs regeneration"}
                         </span>
                       ) : (
                         <div className="flex flex-col gap-0.5">
@@ -136,7 +136,7 @@ export default async function CohortDetailPage({
                       {student.credentialId ?? "—"}
                     </td>
                     <td className="py-2.5 pr-3">
-                      {student.certificateUrl && student.credentialId ? (
+                      {student.credentialId ? (
                         <a
                           href={`/verify/${student.credentialId}`}
                           target="_blank"
@@ -151,11 +151,18 @@ export default async function CohortDetailPage({
                     <td className="py-2.5 pr-3 rounded-r-lg">
                       <div className="flex items-center gap-3">
                         {student.credentialId ? (
-                          <RevokeButton
-                            cohortId={cohort.id}
-                            studentId={student.id}
-                            revoked={Boolean(student.revokedAt)}
-                          />
+                          <>
+                            <GenerateOneButton
+                              cohortId={cohort.id}
+                              studentId={student.id}
+                              regenerate
+                            />
+                            <RevokeButton
+                              cohortId={cohort.id}
+                              studentId={student.id}
+                              revoked={Boolean(student.revokedAt)}
+                            />
+                          </>
                         ) : (
                           <GenerateOneButton cohortId={cohort.id} studentId={student.id} />
                         )}

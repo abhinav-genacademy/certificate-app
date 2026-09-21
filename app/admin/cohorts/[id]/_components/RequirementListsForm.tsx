@@ -102,8 +102,9 @@ export function RequirementListsForm({
         <h2 className="text-lg font-bold">Project requirement lists</h2>
         <p className="text-sm text-muted-grey mt-1">
           The roster is built automatically from whoever appears in <em>both</em> lists below —
-          there's no separate roster upload. Re-uploading either one rebuilds the roster to match;
-          anyone manually added (right) is kept regardless.
+          there&apos;s no separate roster upload. Re-uploading either one rebuilds the roster to match;
+          anyone manually added (right) is kept regardless. If a name changes, generate certificates
+          again to update the affected images.
         </p>
       </div>
       <UploadRow cohortId={cohortId} week="week2" label="Week 2 Project" count={week2Count} />

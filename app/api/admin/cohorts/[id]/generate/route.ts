@@ -30,7 +30,9 @@ export async function POST(
     // skip the requirement check.
     const force = Boolean(body?.force) && Boolean(studentId);
 
-    const allPending = cohort.students.filter((s) => !s.credentialId);
+    // Renaming an issued student invalidates the image, but retains their
+    // credential ID and original issue date. Include those images for repair.
+    const allPending = cohort.students.filter((s) => !s.credentialId || !s.certificateUrl);
     // For the batch path (no studentId), scan every pending student for
     // eligibility — cheap, just in-memory comparisons — but only actually
     // render up to BATCH_SIZE certificates per call, since that's the
@@ -42,7 +44,12 @@ export async function POST(
     // back from ever being examined, since they never leave the pending set
     // — the caller's "stop when a round makes no progress" loop would stall
     // there even though eligible students exist later in the list.
-    const candidates = studentId ? allPending.filter((s) => s.id === studentId) : allPending;
+    // An explicit single-student request also repairs certificates issued
+    // before name changes started invalidating stored images.
+    const candidates = studentId ? cohort.students.filter((s) => s.id === studentId) : allPending;
+    if (studentId && candidates.length === 0) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
 
     const [week2, week3, assessmentScores] = await Promise.all([
       getWeeklySubmissions(cohortId, "week2"),
@@ -64,8 +71,9 @@ export async function POST(
       for (const student of candidates) {
         if (!studentId && processed.length >= BATCH_SIZE) break;
 
+        // Correcting an issued image does not re-assess the credential.
         const missing =
-          force || student.source === "manual"
+          student.credentialId || force || student.source === "manual"
             ? []
             : getMissingRequirements(week2, week3, assessmentScores, student.email);
         if (missing.length > 0) {
@@ -96,7 +104,7 @@ export async function POST(
 
     // Computed from the snapshot fetched above rather than re-reading the
     // cohort, since a read immediately after the writes above can lag.
-    const remainingPending = allPending.length - processed.length;
+    const remainingPending = allPending.filter((s) => !processed.includes(s.id)).length;
 
     return NextResponse.json({
       processed: processed.length,

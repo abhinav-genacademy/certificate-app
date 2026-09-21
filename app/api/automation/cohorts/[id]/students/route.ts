@@ -86,7 +86,7 @@ export async function POST(
       }
     }
 
-    const result = student.credentialId
+    const result = student.credentialId && student.certificateUrl
       ? { credentialId: student.credentialId, certificateUrl: student.certificateUrl! }
       : await generateCertificateForStudent(cohort, student.id);
 

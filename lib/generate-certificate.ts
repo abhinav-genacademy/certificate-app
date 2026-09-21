@@ -41,5 +41,6 @@ export async function generateCertificateForStudent(
     credentialId,
     certificatePng: png,
     issuedAt: issuedAtIso,
+    recipientName: student.name,
   });
 }

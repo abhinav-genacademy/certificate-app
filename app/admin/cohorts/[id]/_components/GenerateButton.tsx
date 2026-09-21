@@ -12,16 +12,17 @@ export function GenerateButton({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [remaining, setRemaining] = useState(pendingCount);
+  const [remaining, setRemaining] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   async function handleGenerate() {
     setLoading(true);
+    setRemaining(pendingCount);
     setError(null);
     setNotice(null);
     try {
-      let stillPending = remaining;
+      let stillPending = pendingCount;
       while (stillPending > 0) {
         const res = await fetch(`/api/admin/cohorts/${cohortId}/generate`, {
           method: "POST",
@@ -55,14 +56,14 @@ export function GenerateButton({
     }
   }
 
-  if (pendingCount === 0 && remaining === 0) {
+  if (!loading && pendingCount === 0) {
     return <span className="text-sm text-muted-grey">All certificates issued</span>;
   }
 
   return (
     <div className="flex items-center gap-3">
       <button onClick={handleGenerate} className="brand-button" disabled={loading}>
-        {loading ? `Generating... (${remaining} left)` : `Generate ${remaining} certificate(s)`}
+        {loading ? `Generating... (${remaining} left)` : `Generate ${pendingCount} certificate(s)`}
       </button>
       {error && <span className="text-sm text-red-400">{error}</span>}
       {!error && notice && <span className="text-sm text-muted-grey">{notice}</span>}

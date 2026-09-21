@@ -38,8 +38,9 @@ export function AddStudentForm({ cohortId }: { cohortId: string }) {
       <h2 className="text-lg font-bold">Add student</h2>
       <p className="text-sm text-muted-grey">
         For exceptions the Week 2/3 lists missed — this person skips the requirement check and
-        won't be removed if the lists are re-uploaded. Adding an email already in this cohort
-        updates their name instead of duplicating them.
+        won&apos;t be removed if the lists are re-uploaded. Adding an email already in this cohort
+        updates their name instead of duplicating them. After a name correction, use Regenerate
+        to update an issued certificate image.
       </p>
       <div className="flex flex-col gap-2">
         <label className="text-xs uppercase tracking-[2px] text-muted-grey">Name</label>
